@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: harold-postgres
+  namespace: harold
+spec:
+  selector:
+    app: harold-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+  clusterIP: None  # headless — direct pod DNS
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: harold-postgres
+  namespace: harold
+spec:
+  serviceName: harold-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: harold-postgres
+  template:
+    metadata:
+      labels:
+        app: harold-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: harold-db-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: harold-db-secret
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: harold-db-secret
+                  key: POSTGRES_DB
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "netbox_ingest"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi

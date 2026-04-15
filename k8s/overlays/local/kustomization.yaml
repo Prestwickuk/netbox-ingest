@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# No ingress in local — use kubectl port-forward instead:
+#   kubectl port-forward -n harold svc/harold-app 8000:80
+patches:
+  - patch: |-
+      $patch: delete
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: harold-ingress
+        namespace: harold

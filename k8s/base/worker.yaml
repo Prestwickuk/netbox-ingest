@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: harold-worker
+  namespace: harold
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: harold-worker
+  template:
+    metadata:
+      labels:
+        app: harold-worker
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/Prestwickuk/harold:latest
+          command: ["python", "-m", "app.worker.runner"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: harold-db-secret
+                  key: DATABASE_URL
+            - name: BATCH_SIZE
+              value: "50"
+            - name: WORKER_POLL_INTERVAL
+              value: "5"
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
