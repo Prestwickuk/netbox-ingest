@@ -1,12 +1,14 @@
+import asyncio
+import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from app.models.db import Job, Record
 
 router = APIRouter()
@@ -46,13 +48,40 @@ def job_detail(
     })
 
 
-@router.get("/jobs/{job_id}/progress", response_class=HTMLResponse)
-def job_progress(request: Request, job_id: uuid.UUID, db: Session = Depends(get_db)):
-    """HTMX partial — returns just the progress bar + stats block."""
-    job = db.get(Job, job_id)
-    if not job:
-        raise HTTPException(404, "Job not found")
-    return templates.TemplateResponse("partials/progress.html", {"request": request, "job": job})
+@router.get("/jobs/{job_id}/stream")
+async def job_stream(job_id: uuid.UUID):
+    """SSE endpoint — pushes progress updates once per second until the job finishes."""
+    async def event_generator():
+        DONE_STATUSES = {"completed", "failed", "cancelled"}
+        while True:
+            with SessionLocal() as db:
+                job = db.get(Job, job_id)
+            if not job:
+                break
+
+            payload = json.dumps({
+                "status": job.status,
+                "progress_pct": job.progress_pct,
+                "processed_count": job.processed_count,
+                "total_records": job.total_records or 0,
+                "success_count": job.success_count,
+                "failed_count": job.failed_count,
+                "skipped_count": job.skipped_count,
+            })
+            yield f"data: {payload}\n\n"
+
+            if job.status in DONE_STATUSES:
+                break
+            await asyncio.sleep(1)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/jobs/{job_id}/cancel", response_class=HTMLResponse)
