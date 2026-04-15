@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}New Import — HAROLD{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+  <h1 class="text-2xl font-semibold mb-6">New Import</h1>
+
+  {% if error %}
+  <div class="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
+    {{ error }}
+  </div>
+  {% endif %}
+
+  <form action="/upload" method="post" enctype="multipart/form-data" class="bg-white rounded-lg shadow p-6 space-y-5">
+
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Job name</label>
+      <input type="text" name="job_name" required
+        value="{{ form.job_name if form else '' }}"
+        placeholder="e.g. DC3 Rack Build — April 2026"
+        class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">File type</label>
+      <select name="file_type" required
+        class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        {% for ft in file_types %}
+        <option value="{{ ft }}" {% if form and form.file_type == ft %}selected{% endif %}>{{ ft }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">NetBox URL</label>
+      <input type="url" name="netbox_url" required
+        value="{{ form.netbox_url if form else '' }}"
+        placeholder="http://localhost:8080"
+        class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">NetBox API token</label>
+      <input type="password" name="netbox_token" required
+        class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">File (.csv or .json)</label>
+      <input type="file" name="file" accept=".csv,.json" required
+        class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+      <p class="mt-1 text-xs text-gray-400">
+        Accepted columns per type:
+        racks: name*, site*, u_height*, location, rack_role, width_inches, serial, asset_tag, comments
+      </p>
+    </div>
+
+    <button type="submit"
+      class="w-full bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700">
+      Upload &amp; Queue
+    </button>
+
+  </form>
+</div>
+{% endblock %}

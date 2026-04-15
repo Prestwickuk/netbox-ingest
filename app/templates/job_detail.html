@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}{{ job.name }} — HAROLD{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <a href="/" class="text-sm text-gray-400 hover:text-gray-600">← All jobs</a>
+</div>
+
+<div class="flex items-start justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-semibold">{{ job.name }}</h1>
+    <p class="text-sm text-gray-400 mt-1">{{ job.file_type }} · {{ job.netbox_url }} · {{ job.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+  </div>
+  {% if job.status in ("pending", "running") %}
+  <form action="/jobs/{{ job.id }}/cancel" method="post">
+    <button class="text-sm text-red-500 hover:text-red-700 border border-red-200 px-3 py-1.5 rounded-md">Cancel</button>
+  </form>
+  {% endif %}
+</div>
+
+{% include "partials/progress.html" %}
+
+<!-- Record filter tabs -->
+<div class="flex gap-2 mb-4">
+  {% for label, val in [("All", "all"), ("Failed", "failed"), ("Skipped", "skipped"), ("Created", "success"), ("Pending", "pending")] %}
+  <a href="/jobs/{{ job.id }}?status_filter={{ val }}"
+    class="px-3 py-1.5 rounded-md text-sm font-medium
+    {% if status_filter == val %}bg-indigo-600 text-white{% else %}bg-white text-gray-600 border border-gray-200 hover:bg-gray-50{% endif %}">
+    {{ label }}
+  </a>
+  {% endfor %}
+</div>
+
+{% if records %}
+<div class="bg-white rounded-lg shadow overflow-hidden">
+  <table class="min-w-full divide-y divide-gray-200 text-sm">
+    <thead class="bg-gray-50">
+      <tr>
+        <th class="px-4 py-3 text-left font-medium text-gray-500 w-12">#</th>
+        <th class="px-4 py-3 text-left font-medium text-gray-500">Name</th>
+        <th class="px-4 py-3 text-left font-medium text-gray-500">Status</th>
+        <th class="px-4 py-3 text-left font-medium text-gray-500">Details</th>
+        <th class="px-4 py-3 text-left font-medium text-gray-500">NetBox</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-200">
+      {% for record in records %}
+      <tr class="{% if record.status == 'failed' %}bg-red-50{% elif record.status == 'skipped' %}bg-yellow-50{% endif %}">
+        <td class="px-4 py-3 text-gray-400">{{ record.row_number }}</td>
+        <td class="px-4 py-3 font-medium">{{ record.display_name }}</td>
+        <td class="px-4 py-3">
+          {% set badge = {
+            "pending":    "bg-gray-100 text-gray-500",
+            "processing": "bg-blue-100 text-blue-700",
+            "success":    "bg-green-100 text-green-700",
+            "failed":     "bg-red-100 text-red-700",
+            "skipped":    "bg-yellow-100 text-yellow-700",
+          } %}
+          <span class="px-2 py-0.5 rounded-full text-xs font-medium {{ badge.get(record.status, '') }}">
+            {{ record.status }}
+          </span>
+        </td>
+        <td class="px-4 py-3 text-gray-500 max-w-xs">
+          {% if record.error_message %}
+            <span class="text-red-600">{{ record.error_message }}</span>
+          {% elif record.logs %}
+            {% for entry in record.logs %}
+              <div class="text-xs {% if entry.level == 'error' %}text-red-500{% elif entry.level == 'warning' %}text-yellow-600{% else %}text-gray-400{% endif %}">
+                {{ entry.message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+        </td>
+        <td class="px-4 py-3">
+          {% if record.netbox_url %}
+          <a href="{{ record.netbox_url }}" target="_blank" class="text-indigo-600 hover:underline text-xs">
+            #{{ record.netbox_id }} ↗
+          </a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-gray-400 text-sm py-8 text-center">No records match this filter.</p>
+{% endif %}
+{% endblock %}
