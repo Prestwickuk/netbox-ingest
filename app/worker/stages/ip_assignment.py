@@ -94,12 +94,18 @@ class IPAssignmentStage(BaseStage):
                     primary_ip_id = existing_ips[0].id
                 continue
 
-            # Allocate next available IP from prefix
-            ip = prefix.available_ips.create({
-                "status": "active",
-                "assigned_object_type": "dcim.interface",
-                "assigned_object_id": interface.id,
-            })
+            # Find next available IP from prefix
+            available = list(self.client.nb.ipam.prefixes.get(id=prefix.id).available_ips.list(limit=1))
+            if not available:
+                raise ValueError(f"No available IPs remaining in prefix '{data['prefix']}'")
+
+            # Create IP and assign to interface in one call
+            ip = self.client.nb.ipam.ip_addresses.create(
+                address=available[0].address,
+                status="active",
+                assigned_object_type="dcim.interface",
+                assigned_object_id=interface.id,
+            )
             self.log_info(session, record,
                 f"Allocated {ip.address} → interface '{iface_name}' (ip id={ip.id})")
 

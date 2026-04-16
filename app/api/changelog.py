@@ -16,6 +16,15 @@ def changelog(request: Request):
 
 CHANGELOG = [
     {
+        "version": "1.0.2",
+        "date": "2026-04-16",
+        "sections": {
+            "Fixed": [
+                "IP assignment: pynetbox available_ips.create() was sending the network address (10.0.0.0) instead of the first usable host. Now uses available_ips.list() to get the next IP and creates it explicitly via ip_addresses.create()",
+            ],
+        },
+    },
+    {
         "version": "1.0.1",
         "date": "2026-04-16",
         "sections": {
