@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}NetBox Instances — HAROLD{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-semibold">NetBox Instances</h1>
+</div>
+
+{% if instances %}
+<div class="bg-white rounded-lg shadow overflow-hidden mb-8">
+  <table class="min-w-full divide-y divide-gray-200 text-sm">
+    <thead class="bg-gray-50">
+      <tr>
+        <th class="px-4 py-3 text-left font-medium text-gray-500">Name</th>
+        <th class="px-4 py-3 text-left font-medium text-gray-500">URL</th>
+        <th class="px-4 py-3 text-left font-medium text-gray-500">Default</th>
+        <th class="px-4 py-3 text-left font-medium text-gray-500">Added</th>
+        <th class="px-4 py-3"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-200">
+      {% for inst in instances %}
+      <tr>
+        <td class="px-4 py-3 font-medium">{{ inst.name }}</td>
+        <td class="px-4 py-3 text-gray-500">{{ inst.url }}</td>
+        <td class="px-4 py-3">
+          {% if inst.is_default %}
+          <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">default</span>
+          {% else %}
+          <form action="/netbox-instances/{{ inst.id }}/set-default" method="post" class="inline">
+            <button class="text-xs text-gray-400 hover:text-gray-600 underline">set default</button>
+          </form>
+          {% endif %}
+        </td>
+        <td class="px-4 py-3 text-gray-400 text-xs">{{ inst.created_at.strftime('%Y-%m-%d') }}</td>
+        <td class="px-4 py-3 text-right">
+          <form action="/netbox-instances/{{ inst.id }}/delete" method="post" class="inline"
+            onsubmit="return confirm('Delete {{ inst.name }}?')">
+            <button class="text-xs text-red-400 hover:text-red-600">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-gray-400 text-sm mb-8">No instances configured yet.</p>
+{% endif %}
+
+<!-- Add instance form -->
+<div class="max-w-lg">
+  <h2 class="text-lg font-semibold mb-4">Add instance</h2>
+  <form action="/netbox-instances" method="post" class="bg-white rounded-lg shadow p-6 space-y-4">
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+      <input type="text" name="name" required placeholder="e.g. Production NetBox"
+        class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">URL</label>
+      <input type="url" name="url" required placeholder="https://netbox.example.com"
+        class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">API token</label>
+      <input type="password" name="token" required
+        class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+    </div>
+    <div class="flex items-center gap-2">
+      <input type="checkbox" name="is_default" id="is_default" value="true" class="rounded">
+      <label for="is_default" class="text-sm text-gray-700">Set as default</label>
+    </div>
+    <button type="submit"
+      class="w-full bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700">
+      Add Instance
+    </button>
+  </form>
+</div>
+{% endblock %}

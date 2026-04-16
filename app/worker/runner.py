@@ -6,7 +6,7 @@ from datetime import datetime
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from app.config import BATCH_SIZE, WORKER_POLL_INTERVAL
+from app.config import BATCH_SIZE, WORKER_POLL_INTERVAL, RATE_LIMIT
 from app.database import SessionLocal
 from app.models.db import Job, Record
 from app.worker.stages.racks import RackStage
@@ -35,12 +35,12 @@ STAGE_MAP = {
 }
 
 
-def claim_batch(session: Session, job_id) -> list[Record]:
+def claim_batch(session: Session, job_id, batch_size: int) -> list[Record]:
     result = session.execute(
         select(Record)
         .where(Record.job_id == job_id, Record.status == "pending")
         .order_by(Record.row_number)
-        .limit(BATCH_SIZE)
+        .limit(batch_size)
         .with_for_update(skip_locked=True)
     )
     return list(result.scalars().all())
@@ -56,7 +56,12 @@ def process_job(job: Job) -> None:
             s.commit()
         return
 
-    log.info(f"Starting job {job.id} ({job.file_type}), {job.total_records} records")
+    batch_size = job.batch_size or BATCH_SIZE
+    rate_limit = job.rate_limit or RATE_LIMIT
+    min_interval = (1.0 / rate_limit) if rate_limit else 0
+
+    log.info(f"Starting job {job.id} ({job.file_type}), {job.total_records} records, "
+             f"batch_size={batch_size}, rate_limit={rate_limit or 'unlimited'}")
     stage = stage_cls(job.netbox_url, job.netbox_token)
 
     with SessionLocal() as s:
@@ -68,12 +73,14 @@ def process_job(job: Job) -> None:
     processed = 0
     while True:
         with SessionLocal() as s:
-            batch = claim_batch(s, job.id)
+            batch = claim_batch(s, job.id, batch_size)
             if not batch:
                 break
             for record in batch:
                 stage.process(s, record)
                 processed += 1
+                if min_interval:
+                    time.sleep(min_interval)
             s.commit()
         log.info(f"Job {job.id}: {processed}/{job.total_records} processed")
 

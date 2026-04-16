@@ -31,28 +31,69 @@
       </select>
     </div>
 
-    <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">NetBox URL</label>
-      <input type="url" name="netbox_url" required
-        value="{{ form.netbox_url if form else '' }}"
-        placeholder="http://localhost:8080"
-        class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-    </div>
+    <!-- NetBox connection -->
+    <fieldset class="border border-gray-200 rounded-md p-4 space-y-4">
+      <legend class="text-sm font-medium text-gray-700 px-1">NetBox connection</legend>
 
-    <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">NetBox API token</label>
-      <input type="password" name="netbox_token" required
-        class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-    </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Instance</label>
+        <select name="netbox_source" id="netbox_source"
+          onchange="toggleCustomFields(this.value)"
+          class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="custom">— Custom URL / token —</option>
+          {% for inst in instances %}
+          <option value="{{ inst.id }}" {% if inst.is_default %}selected{% endif %}>
+            {{ inst.name }}{% if inst.is_default %} (default){% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div id="custom-fields" class="space-y-4 {% if instances and instances|selectattr('is_default')|list %}hidden{% endif %}">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">NetBox URL</label>
+          <input type="url" name="netbox_url"
+            value="{{ form.netbox_url if form else '' }}"
+            placeholder="http://localhost:8080"
+            class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">NetBox API token</label>
+          <input type="password" name="netbox_token"
+            class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+      </div>
+    </fieldset>
+
+    <!-- Advanced options -->
+    <details class="group">
+      <summary class="text-sm font-medium text-gray-500 cursor-pointer hover:text-gray-700 select-none">
+        Advanced options
+      </summary>
+      <div class="mt-3 space-y-4">
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Batch size</label>
+            <input type="number" name="batch_size" min="1" max="500"
+              placeholder="Default: 50"
+              class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <p class="mt-1 text-xs text-gray-400">Records claimed per worker iteration</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Rate limit (rec/sec)</label>
+            <input type="number" name="rate_limit" min="1"
+              placeholder="Default: unlimited"
+              class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <p class="mt-1 text-xs text-gray-400">Max NetBox API calls per second per worker</p>
+          </div>
+        </div>
+      </div>
+    </details>
 
     <div>
       <label class="block text-sm font-medium text-gray-700 mb-1">File (.csv or .json)</label>
       <input type="file" name="file" accept=".csv,.json" required
         class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
-      <p class="mt-1 text-xs text-gray-400">
-        Accepted columns per type:
-        racks: name*, site*, u_height*, location, rack_role, width_inches, serial, asset_tag, comments
-      </p>
     </div>
 
     <button type="submit"
@@ -62,4 +103,10 @@
 
   </form>
 </div>
+
+<script>
+function toggleCustomFields(val) {
+  document.getElementById("custom-fields").classList.toggle("hidden", val !== "custom");
+}
+</script>
 {% endblock %}

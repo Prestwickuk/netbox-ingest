@@ -7,3 +7,4 @@ DATABASE_URL = os.environ.get(
 
 BATCH_SIZE = int(os.environ.get("BATCH_SIZE", "50"))
 WORKER_POLL_INTERVAL = int(os.environ.get("WORKER_POLL_INTERVAL", "5"))
+RATE_LIMIT = int(os.environ.get("RATE_LIMIT", "0"))  # 0 = unlimited

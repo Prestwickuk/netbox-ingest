@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, Integer, Text, DateTime, ForeignKey, JSON, Index
+from sqlalchemy import String, Integer, Text, DateTime, ForeignKey, JSON, Index, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -10,12 +10,23 @@ class Base(DeclarativeBase):
     pass
 
 
+class NetBoxInstance(Base):
+    __tablename__ = "netbox_instances"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), unique=True)
+    url: Mapped[str] = mapped_column(String(500))
+    token: Mapped[str] = mapped_column(String(500))
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class Job(Base):
     __tablename__ = "jobs"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255))
-    file_type: Mapped[str] = mapped_column(String(50))  # racks | rack_infra | patch_panels | network_devices | servers
+    file_type: Mapped[str] = mapped_column(String(50))
     status: Mapped[str] = mapped_column(String(50), default="pending")  # pending | running | completed | failed | cancelled
     total_records: Mapped[int | None] = mapped_column(Integer, nullable=True)
     success_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -23,6 +34,8 @@ class Job(Base):
     skipped_count: Mapped[int] = mapped_column(Integer, default=0)
     netbox_url: Mapped[str] = mapped_column(String(500))
     netbox_token: Mapped[str] = mapped_column(String(500))
+    batch_size: Mapped[int | None] = mapped_column(Integer, nullable=True)   # overrides env BATCH_SIZE if set
+    rate_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)   # max records/sec per worker (0/None = unlimited)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

@@ -91,12 +91,42 @@ def cancel_job(request: Request, job_id: uuid.UUID, db: Session = Depends(get_db
         raise HTTPException(404, "Job not found")
     if job.status in ("pending", "running"):
         job.status = "cancelled"
-        # Mark all pending records as skipped
         db.execute(
             Record.__table__.update()
             .where(Record.job_id == job_id, Record.status == "pending")
             .values(status="skipped")
         )
         db.commit()
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
+
+
+@router.post("/jobs/{job_id}/retry", response_class=HTMLResponse)
+def retry_job(request: Request, job_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Reset all failed records to pending and requeue the job."""
+    job = db.get(Job, job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job.status not in ("completed", "failed", "cancelled"):
+        raise HTTPException(400, "Only completed, failed, or cancelled jobs can be retried")
+
+    failed_count = db.execute(
+        select(Record).where(Record.job_id == job_id, Record.status == "failed")
+    ).scalars().all()
+
+    if not failed_count:
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
+
+    db.execute(
+        Record.__table__.update()
+        .where(Record.job_id == job_id, Record.status == "failed")
+        .values(status="pending", error_message=None, processed_at=None)
+    )
+    job.status = "pending"
+    job.failed_count = 0
+    job.completed_at = None
+    db.commit()
+
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)

@@ -8,3 +8,4 @@ resources:
   - app.yaml
   - worker.yaml
   - ingress.yaml
+  - hpa.yaml
