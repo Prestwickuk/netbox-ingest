@@ -16,6 +16,15 @@ def changelog(request: Request):
 
 CHANGELOG = [
     {
+        "version": "1.0.4",
+        "date": "2026-04-16",
+        "sections": {
+            "Fixed": [
+                "IP assignment: filter out network and broadcast addresses from NetBox available-ips response (NetBox 3.7 returns the network address as the first result, causing 'network ID' rejection on assignment)",
+            ],
+        },
+    },
+    {
         "version": "1.0.3",
         "date": "2026-04-16",
         "sections": {

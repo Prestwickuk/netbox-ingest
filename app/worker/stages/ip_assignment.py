@@ -1,3 +1,4 @@
+import ipaddress
 import logging
 from sqlalchemy.orm import Session
 
@@ -95,10 +96,11 @@ class IPAssignmentStage(BaseStage):
                 continue
 
             # Find next available IP via raw HTTP (bypasses pynetbox DetailEndpoint quirks)
+            network = ipaddress.ip_network(prefix.prefix, strict=False)
             url = f"{self.client.netbox_url}/api/ipam/prefixes/{prefix.id}/available-ips/"
             resp = self.client.nb.http_session.get(
                 url,
-                params={"limit": 1},
+                params={"limit": 10},
                 headers={
                     "Authorization": f"Token {self.client.nb.token}",
                     "Accept": "application/json",
@@ -106,9 +108,16 @@ class IPAssignmentStage(BaseStage):
             )
             resp.raise_for_status()
             available = resp.json()
-            if not available:
+
+            # Filter out network and broadcast addresses (NetBox 3.7 includes them)
+            usable = [
+                a for a in available
+                if ipaddress.ip_interface(a["address"]).ip
+                not in (network.network_address, network.broadcast_address)
+            ]
+            if not usable:
                 raise ValueError(f"No available IPs remaining in prefix '{data['prefix']}'")
-            next_address = available[0]["address"]
+            next_address = usable[0]["address"]
             self.log_info(session, record, f"Next available IP in prefix: {next_address}")
 
             # Create IP and assign to interface
