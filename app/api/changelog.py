@@ -16,6 +16,16 @@ def changelog(request: Request):
 
 CHANGELOG = [
     {
+        "version": "1.0.1",
+        "date": "2026-04-16",
+        "sections": {
+            "Added": [
+                "Example CSV templates for all nine ingestion stages",
+                "Dynamic 'Download example CSV' link on the upload form — updates when file type changes",
+            ],
+        },
+    },
+    {
         "version": "1.0.0",
         "date": "2026-04-16",
         "sections": {
