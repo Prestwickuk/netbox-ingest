@@ -16,6 +16,15 @@ def changelog(request: Request):
 
 CHANGELOG = [
     {
+        "version": "1.0.3",
+        "date": "2026-04-16",
+        "sections": {
+            "Fixed": [
+                "IP assignment: bypass pynetbox DetailEndpoint for available-ips lookup entirely; use raw HTTP session to GET /api/ipam/prefixes/{id}/available-ips/ directly, eliminating incorrect address allocation",
+            ],
+        },
+    },
+    {
         "version": "1.0.2",
         "date": "2026-04-16",
         "sections": {

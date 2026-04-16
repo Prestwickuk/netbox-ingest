@@ -94,14 +94,26 @@ class IPAssignmentStage(BaseStage):
                     primary_ip_id = existing_ips[0].id
                 continue
 
-            # Find next available IP from prefix
-            available = list(self.client.nb.ipam.prefixes.get(id=prefix.id).available_ips.list(limit=1))
+            # Find next available IP via raw HTTP (bypasses pynetbox DetailEndpoint quirks)
+            url = f"{self.client.netbox_url}/api/ipam/prefixes/{prefix.id}/available-ips/"
+            resp = self.client.nb.http_session.get(
+                url,
+                params={"limit": 1},
+                headers={
+                    "Authorization": f"Token {self.client.nb.token}",
+                    "Accept": "application/json",
+                },
+            )
+            resp.raise_for_status()
+            available = resp.json()
             if not available:
                 raise ValueError(f"No available IPs remaining in prefix '{data['prefix']}'")
+            next_address = available[0]["address"]
+            self.log_info(session, record, f"Next available IP in prefix: {next_address}")
 
-            # Create IP and assign to interface in one call
+            # Create IP and assign to interface
             ip = self.client.nb.ipam.ip_addresses.create(
-                address=available[0].address,
+                address=next_address,
                 status="active",
                 assigned_object_type="dcim.interface",
                 assigned_object_id=interface.id,
