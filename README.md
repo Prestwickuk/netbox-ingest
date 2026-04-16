@@ -236,7 +236,18 @@ The specified prefix has been exhausted. Expand the prefix in NetBox IPAM or use
 Your ingress proxy is cutting the connection. The bundled ingress manifest sets 1-hour timeouts via `nginx.ingress.kubernetes.io/proxy-read-timeout`. If you use a different ingress controller, apply the equivalent timeout annotation.
 
 **Alembic migration fails on existing database**
-If you're upgrading from a pre-Phase-4 install, run `alembic upgrade head` to apply the migration that adds `batch_size`, `rate_limit`, and the `netbox_instances` table.
+If the app created tables via `create_all` before migrations were introduced, stamp the DB first then upgrade:
+```bash
+alembic stamp head
+alembic upgrade head
+```
+If you see `column jobs.batch_size does not exist`, the columns were not added by `create_all` (it only creates tables, never alters them). Add them manually:
+```bash
+docker compose exec db psql -U netbox_ingest -d netbox_ingest -c \
+  "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS batch_size INTEGER; \
+   ALTER TABLE jobs ADD COLUMN IF NOT EXISTS rate_limit INTEGER;"
+```
+Then restart the app and worker containers.
 
 ---
 

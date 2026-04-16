@@ -26,8 +26,15 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
     )
 
-    op.add_column("jobs", sa.Column("batch_size", sa.Integer(), nullable=True))
-    op.add_column("jobs", sa.Column("rate_limit", sa.Integer(), nullable=True))
+    # Use batch_op so we can add IF NOT EXISTS semantics via execute
+    conn = op.get_bind()
+    cols = {row[0] for row in conn.execute(sa.text(
+        "SELECT column_name FROM information_schema.columns WHERE table_name='jobs'"
+    ))}
+    if "batch_size" not in cols:
+        op.add_column("jobs", sa.Column("batch_size", sa.Integer(), nullable=True))
+    if "rate_limit" not in cols:
+        op.add_column("jobs", sa.Column("rate_limit", sa.Integer(), nullable=True))
 
 
 def downgrade() -> None:
