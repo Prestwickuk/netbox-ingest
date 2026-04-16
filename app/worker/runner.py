@@ -14,6 +14,10 @@ from app.worker.stages.rack_infra import RackInfraStage
 from app.worker.stages.patch_panels import PatchPanelStage
 from app.worker.stages.network_devices import NetworkDeviceStage
 from app.worker.stages.servers import ServerStage
+from app.worker.stages.power_panels import PowerPanelStage
+from app.worker.stages.power_feeds import PowerFeedStage
+from app.worker.stages.cables import CableStage
+from app.worker.stages.ip_assignment import IPAssignmentStage
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -24,6 +28,10 @@ STAGE_MAP = {
     "patch_panels": PatchPanelStage,
     "network_devices": NetworkDeviceStage,
     "servers": ServerStage,
+    "power_panels": PowerPanelStage,
+    "power_feeds": PowerFeedStage,
+    "cables": CableStage,
+    "ip_assignment": IPAssignmentStage,
 }
 
 
