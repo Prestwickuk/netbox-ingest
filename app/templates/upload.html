@@ -22,8 +22,17 @@
     </div>
 
     <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">File type</label>
+      <div class="flex items-center justify-between mb-1">
+        <label class="block text-sm font-medium text-gray-700">File type</label>
+        <a id="template-download-link"
+          href="/static/csv_templates/racks.csv"
+          download
+          class="text-xs text-indigo-600 hover:text-indigo-800 hover:underline">
+          Download example CSV
+        </a>
+      </div>
       <select name="file_type" required
+        onchange="updateTemplateLink(this.value)"
         class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
         {% for ft in file_types %}
         <option value="{{ ft }}" {% if form and form.file_type == ft %}selected{% endif %}>{{ ft }}</option>
@@ -107,6 +116,10 @@
 <script>
 function toggleCustomFields(val) {
   document.getElementById("custom-fields").classList.toggle("hidden", val !== "custom");
+}
+function updateTemplateLink(fileType) {
+  document.getElementById("template-download-link").href =
+    "/static/csv_templates/" + fileType + ".csv";
 }
 </script>
 {% endblock %}

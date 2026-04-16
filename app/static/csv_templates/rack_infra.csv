@@ -1,0 +1,4 @@
+name,site,rack,position_u,face,manufacturer,device_type,role,status
+A-01-BP-1U,DC1,A-01,1,front,Generic,1U Blanking Panel,Infrastructure,planned
+A-01-BP-2U,DC1,A-01,2,front,Generic,1U Blanking Panel,Infrastructure,planned
+A-01-CM-45,DC1,A-01,45,front,Generic,1U Cable Manager,Infrastructure,planned

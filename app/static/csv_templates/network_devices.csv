@@ -1,0 +1,5 @@
+name,site,manufacturer,device_type,device_role,status,rack,position_u,face,platform,serial,asset_tag
+spine-01,DC1,Arista,DCS-7050CX3-32S,Network Switch,planned,B-01,1,front,EOS,SN-SW-001,AT-SW-001
+spine-02,DC1,Arista,DCS-7050CX3-32S,Network Switch,planned,B-01,3,front,EOS,SN-SW-002,AT-SW-002
+leaf-01,DC1,Arista,DCS-7060CX2-32S,Network Switch,planned,A-01,43,front,EOS,SN-SW-003,AT-SW-003
+oob-mgmt-01,DC1,Cisco,Catalyst 9300-24P,Management Switch,planned,B-01,10,front,,SN-SW-004,

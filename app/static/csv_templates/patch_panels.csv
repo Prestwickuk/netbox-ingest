@@ -1,0 +1,4 @@
+name,site,rack,position_u,face,manufacturer,device_type,role,status,module_bay_count,cassette_manufacturer,cassette_device_type
+A-01-PP-40,DC1,A-01,40,front,Generic,24-port Cat6 Patch Panel,Patch Panel,planned,,,
+A-01-FE-38,DC1,A-01,38,front,FS,1U 3-slot Fibre Enclosure,Patch Panel,planned,3,FS,24-port LC OM4 Cassette
+A-01-FE-36,DC1,A-01,36,front,FS,2U 6-slot Fibre Enclosure,Patch Panel,planned,6,FS,24-port LC OM4 Cassette

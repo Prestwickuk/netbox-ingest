@@ -1,0 +1,4 @@
+device,site,prefix,vrf,iface_1_name,iface_2_name,iface_3_name,iface_4_name,iface_5_name,primary_mgmt_iface,primary_data_iface
+gpu-worker-01,DC1,10.0.0.0/24,,BMC,BF1-mgmt,BF2-mgmt,BF1-data,BF2-data,BMC,BF1-data
+gpu-worker-02,DC1,10.0.0.0/24,,BMC,BF1-mgmt,BF2-mgmt,BF1-data,BF2-data,BMC,BF1-data
+mgmt-01,DC1,10.0.1.0/24,,idrac,eth0,,,idrac,eth0

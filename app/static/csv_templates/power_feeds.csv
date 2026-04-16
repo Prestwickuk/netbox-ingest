@@ -1,0 +1,5 @@
+name,site,power_panel,rack,status,feed_type
+A-01-Feed-A,DC1,Panel-A,A-01,planned,32A-3P-230V
+A-01-Feed-B,DC1,Panel-A,A-01,planned,32A-3P-230V
+A-02-Feed-A,DC1,Panel-A,A-02,planned,63A-3P-230V
+B-01-Feed-A,DC1,Panel-B,B-01,planned,32A-3P-230V

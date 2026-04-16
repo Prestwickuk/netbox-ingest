@@ -1,0 +1,4 @@
+name,site,u_height,location,rack_role,width_inches,serial,asset_tag,comments
+A-01,DC1,42,Pod A,Server,19,SN-RACK-001,AT-RACK-001,Primary compute rack
+A-02,DC1,42,Pod A,Server,19,SN-RACK-002,AT-RACK-002,
+B-01,DC1,47,Pod B,Network,19,,AT-RACK-003,Core networking rack

@@ -1,0 +1,5 @@
+a_device,a_site,a_termination_type,a_termination_name,b_device,b_site,b_termination_type,b_termination_name,label,cable_type,color,status
+gpu-worker-01,DC1,interface,eth0,leaf-01,DC1,interface,Ethernet1,CAB-001,cat6,blue,planned
+A-01-PP-40,DC1,front_port,Port 1,leaf-01,DC1,interface,Ethernet2,CAB-002,cat6,,planned
+A-01-FE-38,DC1,rear_port,Rear Port 1,A-01-FE-36,DC1,front_port,Port 1,CAB-003,mmf-om4,aqua,planned
+gpu-worker-01,DC1,power_port,PSU1,pdu-a-01,DC1,power_outlet,Outlet 1,CAB-004,,,planned

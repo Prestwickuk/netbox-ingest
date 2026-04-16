@@ -1,0 +1,4 @@
+name,site,manufacturer,device_type,device_role,status,rack,position_u,face,platform,serial,asset_tag,tenant
+gpu-worker-01,DC1,NVIDIA,HGX H100 80GB,GPU Server,planned,A-01,10,front,Linux,SN-GPU-001,AT-GPU-001,AI Platform
+gpu-worker-02,DC1,NVIDIA,HGX H100 80GB,GPU Server,planned,A-01,12,front,Linux,SN-GPU-002,AT-GPU-002,AI Platform
+mgmt-01,DC1,Dell,PowerEdge R650,Server,planned,A-01,42,front,Linux,SN-SRV-001,AT-SRV-001,
