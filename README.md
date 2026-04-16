@@ -1,6 +1,6 @@
 # HAROLD
 
-**Hardware Asset Rack & Loading Orchestration Daemon**
+**Hardware Asset Rack Orchestration & Loading Daemon**
 
 HAROLD is a bulk ingestion service for [NetBox](https://netboxlabs.com/), built for infrastructure teams that need to onboard large numbers of physical assets — racks, servers, network devices, patch panels, power infrastructure, cabling, and IP addresses — quickly and reliably.
 

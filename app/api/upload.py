@@ -3,7 +3,6 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -11,9 +10,9 @@ from app.database import get_db
 from app.models.db import Job, NetBoxInstance, Record
 from app.parsers.csv_parser import parse_csv
 from app.parsers.json_parser import parse_json
+from app.templates_config import templates
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
 
 VALID_FILE_TYPES = [
     "racks",

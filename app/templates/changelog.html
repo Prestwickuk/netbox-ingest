@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Changelog — HAROLD{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl">
+  <h1 class="text-2xl font-semibold mb-1">Changelog</h1>
+  <p class="text-sm text-gray-400 mb-8">Hardware Asset Rack Orchestration &amp; Loading Daemon</p>
+
+  {% for entry in changelog %}
+  <div class="mb-10">
+    <div class="flex items-baseline gap-3 mb-3">
+      <h2 class="text-lg font-semibold">v{{ entry.version }}</h2>
+      <span class="text-xs text-gray-400">{{ entry.date }}</span>
+    </div>
+    {% for section, items in entry.sections.items() %}
+    <div class="mb-3">
+      <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wide mb-1">{{ section }}</h3>
+      <ul class="space-y-1">
+        {% for item in items %}
+        <li class="text-sm text-gray-700 flex gap-2">
+          <span class="text-gray-300 select-none">—</span>
+          {{ item }}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+  </div>
+  {% if not loop.last %}
+  <hr class="border-gray-100 mb-10">
+  {% endif %}
+  {% endfor %}
+</div>
+{% endblock %}

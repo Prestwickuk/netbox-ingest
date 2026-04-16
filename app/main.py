@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.database import engine
 from app.models.db import Base
-from app.api import jobs, upload, netbox_instances
+from app.api import jobs, upload, netbox_instances, changelog
 
 
 @asynccontextmanager
@@ -19,3 +19,4 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(jobs.router)
 app.include_router(upload.router)
 app.include_router(netbox_instances.router)
+app.include_router(changelog.router)
