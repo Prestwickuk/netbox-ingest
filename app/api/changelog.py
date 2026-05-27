@@ -16,6 +16,15 @@ def changelog(request: Request):
 
 CHANGELOG = [
     {
+        "version": "1.0.5",
+        "date": "2026-05-27",
+        "sections": {
+            "Fixed": [
+                "Logo image 404 on Linux deployments: nav template referenced /static/HAROLD-LOGO.PNG (uppercase) but the file on disk is HAROLD-LOGO.png. Worked on macOS (case-insensitive filesystem) but failed on Linux containers (case-sensitive). Template now matches the file casing.",
+            ],
+        },
+    },
+    {
         "version": "1.0.4",
         "date": "2026-04-16",
         "sections": {
