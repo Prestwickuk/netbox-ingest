@@ -1,7 +1,13 @@
 import os
+import sys
+import pathlib
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool, create_engine
 from alembic import context
+
+# Alembic is installed as a console script, so the project root isn't on sys.path
+# by default. Prepend it so `from app.models.db import Base` resolves.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 config = context.config
 

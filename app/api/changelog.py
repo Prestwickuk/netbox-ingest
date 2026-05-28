@@ -16,6 +16,15 @@ def changelog(request: Request):
 
 CHANGELOG = [
     {
+        "version": "1.0.7",
+        "date": "2026-05-28",
+        "sections": {
+            "Fixed": [
+                "Alembic migrations failing with ModuleNotFoundError: No module named 'app' when run via `docker compose exec app alembic upgrade head`. Alembic is installed as a console script which doesn't add the cwd to sys.path the way uvicorn does. migrations/env.py now prepends the project root to sys.path before importing app.models.db.",
+            ],
+        },
+    },
+    {
         "version": "1.0.6",
         "date": "2026-05-28",
         "sections": {
