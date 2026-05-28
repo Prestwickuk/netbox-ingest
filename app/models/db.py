@@ -36,6 +36,7 @@ class Job(Base):
     netbox_token: Mapped[str] = mapped_column(String(500))
     batch_size: Mapped[int | None] = mapped_column(Integer, nullable=True)   # overrides env BATCH_SIZE if set
     rate_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)   # max records/sec per worker (0/None = unlimited)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)   # populated when job fails before/outside record processing
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

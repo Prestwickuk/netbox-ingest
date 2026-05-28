@@ -16,6 +16,20 @@ def changelog(request: Request):
 
 CHANGELOG = [
     {
+        "version": "1.0.6",
+        "date": "2026-05-28",
+        "sections": {
+            "Added": [
+                "Job.error_message column + Alembic migration 0002. When a job fails before any record is processed (e.g. invalid token, NetBox unreachable, malformed CSV that crashes the stage), the exception text is now persisted to the DB and shown as a red banner on the job detail page. Previously the only record of the failure was in worker stdout.",
+                "Upload-time required-header validation for cables, power_panels, power_feeds, and ip_assignment. Missing columns are now caught at upload, not at processing time.",
+            ],
+            "Fixed": [
+                "Cables stage: a missing 'a_device' (or other required) column in the CSV raised KeyError in the dedup check, bypassed the per-record error handler, and killed the entire job. The dedup check now uses .get() defensively so the record fails cleanly via REQUIRED_FIELDS validation.",
+                "NetBoxClient now strips 'Token ' / 'Bearer ' prefixes from the supplied token before passing it to pynetbox, which builds the Authorization header itself. Saving a token with a prefix no longer results in 403 'Invalid authorization header'.",
+            ],
+        },
+    },
+    {
         "version": "1.0.5",
         "date": "2026-05-27",
         "sections": {

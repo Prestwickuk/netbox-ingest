@@ -28,10 +28,12 @@ class CableStage(BaseStage):
         data = record.raw_data
 
         # Duplicate check: is termination A already cabled?
+        # Use .get() so a missing column doesn't KeyError out of the try and kill the job;
+        # super().process() runs REQUIRED_FIELDS validation and fails the record cleanly.
         try:
             term_a = self._resolve_termination(
-                data["a_device"], data["a_site"],
-                data["a_termination_type"], data["a_termination_name"],
+                data.get("a_device", ""), data.get("a_site", ""),
+                data.get("a_termination_type", ""), data.get("a_termination_name", ""),
             )
             if term_a and getattr(term_a, "cable", None):
                 existing_id = term_a.cable.id

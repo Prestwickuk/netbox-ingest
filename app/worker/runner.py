@@ -49,10 +49,12 @@ def claim_batch(session: Session, job_id, batch_size: int) -> list[Record]:
 def process_job(job: Job) -> None:
     stage_cls = STAGE_MAP.get(job.file_type)
     if not stage_cls:
-        log.error(f"No stage registered for file_type='{job.file_type}', skipping job {job.id}")
+        msg = f"No stage registered for file_type='{job.file_type}'"
+        log.error(f"{msg}, skipping job {job.id}")
         with SessionLocal() as s:
             j = s.get(Job, job.id)
             j.status = "failed"
+            j.error_message = msg
             s.commit()
         return
 
@@ -109,6 +111,7 @@ def run() -> None:
                     j = s.get(Job, job.id)
                     if j:
                         j.status = "failed"
+                        j.error_message = f"{type(exc).__name__}: {exc}"
                         s.commit()
         else:
             time.sleep(WORKER_POLL_INTERVAL)

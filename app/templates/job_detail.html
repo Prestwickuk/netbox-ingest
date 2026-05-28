@@ -27,6 +27,16 @@
   </div>
 </div>
 
+{% if job.status == "failed" and job.error_message %}
+<div class="mb-6 rounded-md border border-red-200 bg-red-50 p-4">
+  <p class="text-sm font-medium text-red-700">Job failed</p>
+  <pre class="mt-2 text-xs text-red-700 whitespace-pre-wrap break-all">{{ job.error_message }}</pre>
+  <p class="mt-2 text-xs text-red-500">
+    For a full traceback, check the worker logs (e.g. <code>docker compose logs worker</code> or <code>kubectl logs -n harold deploy/harold-worker</code>).
+  </p>
+</div>
+{% endif %}
+
 {% include "partials/progress.html" %}
 
 <!-- Record filter tabs -->

@@ -9,10 +9,19 @@ from urllib3.util.retry import Retry
 log = logging.getLogger(__name__)
 
 
+def _clean_token(token: str) -> str:
+    """Strip 'Token ' or 'Bearer ' prefixes — pynetbox builds the header itself."""
+    cleaned = (token or "").strip()
+    for prefix in ("Token ", "Bearer "):
+        if cleaned.lower().startswith(prefix.lower()):
+            cleaned = cleaned[len(prefix):].strip()
+    return cleaned
+
+
 class NetBoxClient:
     def __init__(self, url: str, token: str):
         self.netbox_url = url.rstrip("/")
-        self.nb = pynetbox.api(self.netbox_url, token=token)
+        self.nb = pynetbox.api(self.netbox_url, token=_clean_token(token))
 
         # Retry on 429 and 5xx with exponential backoff
         retry = Retry(

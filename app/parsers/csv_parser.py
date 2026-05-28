@@ -9,6 +9,13 @@ REQUIRED_HEADERS: dict[str, list[str]] = {
     "patch_panels": ["name", "rack", "position_u", "face", "manufacturer", "device_type"],
     "network_devices": ["name", "site", "manufacturer", "device_type", "device_role", "status"],
     "servers": ["name", "site", "manufacturer", "device_type", "device_role", "status"],
+    "power_panels": ["name", "site"],
+    "power_feeds": ["name", "site", "power_panel", "rack"],
+    "cables": [
+        "a_device", "a_site", "a_termination_type", "a_termination_name",
+        "b_device", "b_site", "b_termination_type", "b_termination_name",
+    ],
+    "ip_assignment": ["device", "site", "prefix"],
 }
 
 
