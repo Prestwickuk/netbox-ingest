@@ -4,3 +4,4 @@ A-01-PP-40,DC1,front_port,Port 1,leaf-01,DC1,interface,Ethernet2,CAB-002,cat6,,p
 A-01-FE-38,DC1,rear_port,Rear Port 1,A-01-FE-36,DC1,front_port,Port 1,CAB-003,mmf-om4,aqua,planned
 gpu-worker-01,DC1,power_port,PSU1,pdu-a-01,DC1,power_outlet,Outlet 1,CAB-004,,,planned
 gpu-worker-01,DC1,console_port,Console,console-srv-01,DC1,console_server_port,Port 1,CAB-005,cat6,,planned
+PP-A-01,DC1,power_feed,Feed-A-01,pdu-a-01,DC1,power_port,Input,CAB-006,,,planned

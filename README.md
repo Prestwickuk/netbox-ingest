@@ -15,13 +15,13 @@ HAROLD accepts CSV or JSON files and ingests them into NetBox via the API, handl
 | Type | What it creates in NetBox |
 |---|---|
 | `racks` | Racks, with site/location/role resolution |
-| `rack_infra` | Rack-mounted infrastructure devices (blanking panels, cable managers) |
+| `rack_infra` | Rack-mounted infrastructure devices (blanking panels, cable managers, PDUs — any device whose role is set in NetBox) |
 | `patch_panels` | Patch panels and FS fibre enclosures, including cassette module installation |
 | `network_devices` | Switches, routers, and other network devices |
 | `servers` | Compute servers, with tenant assignment |
 | `power_panels` | Site-level power panels |
 | `power_feeds` | Power feeds from panel to rack, with electrical spec lookup by feed type |
-| `cables` | Direct device connections, device-to-patch-panel, patch-panel-to-patch-panel, and PSU-to-PDU |
+| `cables` | Direct device connections, device-to-patch-panel, patch-panel-to-patch-panel, PSU-to-PDU, console-port-to-console-server, and power-feed-to-PDU-input |
 | `ip_assignment` | IP allocation from IPAM prefixes across up to five interfaces per device, with primary IP designation |
 
 ### Key features
@@ -172,6 +172,8 @@ All fields marked `*` are required.
 **rack_infra**
 `name*, site*, rack*, position_u*, face*, manufacturer*, device_type*, role*, status`
 
+> Use this stage for PDUs too — set `role` to your PDU role (e.g. `PDU`) and pick a `device_type` whose outlet templates match the PDU model. NetBox auto-creates the power outlets from the template. Cable the PDU input to a `power_feed` and outlets to server PSUs via the `cables` stage.
+
 **patch_panels**
 `name*, site*, rack*, position_u*, face*, manufacturer*, device_type*, role*, status, module_bay_count, cassette_manufacturer, cassette_device_type`
 
@@ -199,7 +201,9 @@ Supported `feed_type` values and their electrical specs:
 **cables**
 `a_device*, a_site*, a_termination_type*, a_termination_name*, b_device*, b_site*, b_termination_type*, b_termination_name*, label, cable_type, color, status`
 
-Valid `termination_type` values: `interface`, `front_port`, `rear_port`, `power_port`, `power_outlet`, `console_port`, `console_server_port`
+Valid `termination_type` values: `interface`, `front_port`, `rear_port`, `power_port`, `power_outlet`, `console_port`, `console_server_port`, `power_feed`
+
+> For `power_feed`, the `a_device` / `b_device` column should hold the **power panel name** (not a device), since feeds belong to panels in NetBox. The `a_termination_name` / `b_termination_name` is the feed name.
 
 **ip_assignment**
 `device*, site*, prefix*, vrf, iface_1_name, iface_2_name, iface_3_name, iface_4_name, iface_5_name, primary_mgmt_iface, primary_data_iface`

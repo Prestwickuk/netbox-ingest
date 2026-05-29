@@ -17,6 +17,7 @@ TERMINATION_MAP = {
     "power_outlet":        ("dcim.power_outlets",        "dcim.poweroutlet"),
     "console_port":        ("dcim.console_ports",        "dcim.consoleport"),
     "console_server_port": ("dcim.console_server_ports", "dcim.consoleserverport"),
+    "power_feed":          ("dcim.power_feeds",          "dcim.powerfeed"),
 }
 
 
@@ -94,6 +95,19 @@ class CableStage(BaseStage):
         )
         if not site:
             raise ValueError(f"Site '{site_name}' not found in NetBox")
+
+        # power_feed belongs to a power_panel, not a device — the a_device/b_device
+        # column holds the panel name in this case.
+        if term_type == "power_feed":
+            panel = self.client.nb.dcim.power_panels.get(name=device_name, site_id=site.id)
+            if not panel:
+                raise ValueError(f"Power panel '{device_name}' not found in site '{site_name}'")
+            feed = self.client.nb.dcim.power_feeds.get(name=term_name, power_panel_id=panel.id)
+            if not feed:
+                raise ValueError(
+                    f"Power feed '{term_name}' not found on panel '{device_name}'"
+                )
+            return feed
 
         device = self.client.nb.dcim.devices.get(name=device_name, site_id=site.id)
         if not device:

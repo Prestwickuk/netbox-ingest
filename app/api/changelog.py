@@ -16,6 +16,18 @@ def changelog(request: Request):
 
 CHANGELOG = [
     {
+        "version": "1.0.9",
+        "date": "2026-05-29",
+        "sections": {
+            "Added": [
+                "Cables stage now supports `power_feed` terminations, closing the panel → feed → PDU input gap. The full upstream power chain (power_panel → power_feed → PDU.power_port → PDU.power_outlet → server.power_port) can now be modelled end-to-end. For `power_feed` terminations, the `a_device` / `b_device` column holds the power panel name since feeds belong to panels, not devices.",
+            ],
+            "Docs": [
+                "README clarifies that PDUs are ingested via the `rack_infra` stage with `role` set to your PDU role — NetBox auto-creates the outlets from the device-type's outlet templates.",
+            ],
+        },
+    },
+    {
         "version": "1.0.8",
         "date": "2026-05-29",
         "sections": {
