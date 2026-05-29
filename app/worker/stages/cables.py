@@ -10,11 +10,13 @@ STATUS_DEFAULT = "planned"
 
 # Maps CSV termination_type → (pynetbox endpoint attr, NetBox object_type string)
 TERMINATION_MAP = {
-    "interface":    ("dcim.interfaces",    "dcim.interface"),
-    "front_port":   ("dcim.front_ports",   "dcim.frontport"),
-    "rear_port":    ("dcim.rear_ports",    "dcim.rearport"),
-    "power_port":   ("dcim.power_ports",   "dcim.powerport"),
-    "power_outlet": ("dcim.power_outlets", "dcim.poweroutlet"),
+    "interface":           ("dcim.interfaces",           "dcim.interface"),
+    "front_port":          ("dcim.front_ports",          "dcim.frontport"),
+    "rear_port":           ("dcim.rear_ports",           "dcim.rearport"),
+    "power_port":          ("dcim.power_ports",          "dcim.powerport"),
+    "power_outlet":        ("dcim.power_outlets",        "dcim.poweroutlet"),
+    "console_port":        ("dcim.console_ports",        "dcim.consoleport"),
+    "console_server_port": ("dcim.console_server_ports", "dcim.consoleserverport"),
 }
 
 

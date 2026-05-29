@@ -199,7 +199,7 @@ Supported `feed_type` values and their electrical specs:
 **cables**
 `a_device*, a_site*, a_termination_type*, a_termination_name*, b_device*, b_site*, b_termination_type*, b_termination_name*, label, cable_type, color, status`
 
-Valid `termination_type` values: `interface`, `front_port`, `rear_port`, `power_port`, `power_outlet`
+Valid `termination_type` values: `interface`, `front_port`, `rear_port`, `power_port`, `power_outlet`, `console_port`, `console_server_port`
 
 **ip_assignment**
 `device*, site*, prefix*, vrf, iface_1_name, iface_2_name, iface_3_name, iface_4_name, iface_5_name, primary_mgmt_iface, primary_data_iface`

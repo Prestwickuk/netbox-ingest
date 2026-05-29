@@ -16,6 +16,15 @@ def changelog(request: Request):
 
 CHANGELOG = [
     {
+        "version": "1.0.8",
+        "date": "2026-05-29",
+        "sections": {
+            "Added": [
+                "Cables stage now supports `console_port` and `console_server_port` terminations, enabling out-of-band console patching (server console port → console server port, or via a patch panel) that NetBox already models but HAROLD previously rejected as 'Invalid termination type'.",
+            ],
+        },
+    },
+    {
         "version": "1.0.7",
         "date": "2026-05-28",
         "sections": {
