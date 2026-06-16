@@ -183,7 +183,13 @@ All fields marked `*` are required.
 `name*, site*, manufacturer*, device_type*, device_role*, status*, rack, position_u, face, platform, serial, asset_tag`
 
 **servers**
-`name*, site*, manufacturer*, device_type*, device_role*, status*, rack, position_u, face, platform, serial, asset_tag, tenant`
+`name*, site*, manufacturer*, device_type*, device_role*, status*, rack, position_u, face, platform, serial, asset_tag, tenant, bmc_ip, bmc_username, bmc_password, bmc_interface, boot_mac, boot_interface`
+
+- `bmc_ip`: Optional. IP address for BMC (IPMI/Redfish). Will be assigned to the BMC interface and sets the device `primary_ip4` in NetBox.
+- `bmc_username` / `bmc_password`: Optional credentials, securely saved in NetBox device `local_context_data` under `bmc`.
+- `bmc_interface`: Optional name of the BMC interface (defaults to `bmc`).
+- `boot_mac`: Optional MAC address assigned to the boot interface (defaults to `eth0` or custom `boot_interface`).
+- `boot_interface`: Optional name of the boot interface (defaults to `eth0`).
 
 **power_panels**
 `name*, site*, location`
@@ -216,6 +222,31 @@ Valid `termination_type` values: `interface`, `front_port`, `rear_port`, `power_
 ### Retrying failures
 
 On the job detail page, a **Retry failed (N)** button appears when a completed job has failed records. Clicking it resets those records to pending and requeues the job — no need to re-upload the file.
+
+---
+
+## vMetal Integration
+
+HAROLD supports preparing server nodes for automated provisioning by **vMetal (by vCluster Labs)**.
+
+### 1. Ingestion parameters
+When uploading your servers, include optional BMC and MAC addresses:
+- `bmc_ip` / `bmc_interface`: Set the BMC IP and interface name.
+- `bmc_username` / `bmc_password`: Stored securely in NetBox's `local_context_data` (local config context).
+- `boot_mac` / `boot_interface`: Updates or creates the boot network interface (e.g. `eth0`) with the MAC address.
+
+### 2. Syncing NetBox to Kubernetes (vMetal)
+Use the included synchronization utility to pull server configurations from NetBox and declare them as `BareMetalHost` and `Secret` resources in your Kubernetes cluster:
+
+```bash
+python scripts/netbox_vmetal_sync.py \
+  --netbox-url "http://localhost:8000" \
+  --netbox-token "your_token" \
+  --namespace vmetal-system \
+  --status staged
+```
+
+Run with `--dry-run` to output YAML manifests to stdout for GitOps/validation pipelines.
 
 ---
 
