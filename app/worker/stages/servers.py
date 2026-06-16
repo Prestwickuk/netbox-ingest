@@ -111,4 +111,89 @@ class ServerStage(BaseStage):
 
         device = self.client.nb.dcim.devices.create(**payload)
         self.log_info(session, record, f"Created device id={device.id}")
+
+        # Configure Optional Boot MAC Address and Boot Interface
+        boot_mac = data.get("boot_mac", "").strip()
+        boot_interface_name = data.get("boot_interface", "eth0").strip()
+        if boot_mac:
+            self._configure_interface(session, record, device.id, boot_interface_name, mac_address=boot_mac)
+
+        # Configure Optional BMC details
+        bmc_ip = data.get("bmc_ip", "").strip()
+        bmc_interface_name = data.get("bmc_interface", "bmc").strip()
+        bmc_username = data.get("bmc_username", "").strip()
+        bmc_password = data.get("bmc_password", "").strip()
+
+        if bmc_ip:
+            # Create/update BMC interface
+            bmc_interface = self._configure_interface(
+                session, record, device.id, bmc_interface_name, interface_type="other"
+            )
+            # Allocate and assign IP to BMC interface
+            ip_obj = self._configure_ip(session, record, bmc_interface, bmc_ip)
+            
+            # Set primary IP
+            device.update({"primary_ip4": ip_obj.id})
+            self.log_info(session, record, f"Set device primary_ip4 to BMC IP (id={ip_obj.id})")
+
+        if bmc_username or bmc_password:
+            # Update device local_context_data with BMC details
+            local_context = device.local_context_data or {}
+            if not isinstance(local_context, dict):
+                local_context = {}
+            
+            local_context["bmc"] = {
+                "username": bmc_username,
+                "password": bmc_password,
+                "ip": bmc_ip.split("/")[0] if bmc_ip else "",
+            }
+            device.update({"local_context_data": local_context})
+            self.log_info(session, record, f"Stored BMC credentials in local_context_data for device id={device.id}")
+
         return device.id, f"{self.client.netbox_url}/dcim/devices/{device.id}/"
+
+    def _configure_interface(self, session, record, device_id, name, mac_address=None, interface_type="1000base-t"):
+        interface = self.client.nb.dcim.interfaces.get(device_id=device_id, name=name)
+        if interface:
+            payload = {}
+            if mac_address and (interface.mac_address or "").lower() != mac_address.lower():
+                payload["mac_address"] = mac_address.lower()
+            if payload:
+                interface.update(payload)
+                self.log_info(session, record, f"Updated existing interface '{name}' on device id={device_id}")
+        else:
+            payload = {
+                "device": device_id,
+                "name": name,
+                "type": interface_type,
+            }
+            if mac_address:
+                payload["mac_address"] = mac_address.lower()
+            interface = self.client.nb.dcim.interfaces.create(**payload)
+            self.log_info(session, record, f"Created interface '{name}' on device id={device_id}")
+        return interface
+
+    def _configure_ip(self, session, record, interface, ip_with_mask):
+        ip_str = ip_with_mask.strip()
+        if "/" not in ip_str:
+            ip_str = f"{ip_str}/32"
+
+        # Check if IP address exists
+        existing_ips = list(self.client.nb.ipam.ip_addresses.filter(address=ip_str))
+        if existing_ips:
+            ip = existing_ips[0]
+            if ip.assigned_object_id != interface.id or ip.assigned_object_type != "dcim.interface":
+                ip.update({
+                    "assigned_object_type": "dcim.interface",
+                    "assigned_object_id": interface.id,
+                })
+                self.log_info(session, record, f"Re-assigned existing IP {ip.address} to interface '{interface.name}'")
+        else:
+            ip = self.client.nb.ipam.ip_addresses.create(
+                address=ip_str,
+                status="active",
+                assigned_object_type="dcim.interface",
+                assigned_object_id=interface.id,
+            )
+            self.log_info(session, record, f"Created and assigned IP {ip.address} to interface '{interface.name}'")
+        return ip
