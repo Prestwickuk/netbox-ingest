@@ -89,17 +89,12 @@ k8s/
 
 ### Build and push the image
 
-```bash
-docker build -t ghcr.io/Prestwickuk/harold:latest .
-docker push ghcr.io/Prestwickuk/harold:latest
-```
+Every pull request tests the Python application and builds the production
+`linux/amd64` image without pushing it. Merges to `main` and `v*` tags publish
+tested images to `ghcr.io/loft-sh/harold` with SBOM and provenance attestations.
 
-To tag a release:
-
-```bash
-docker build -t ghcr.io/Prestwickuk/harold:v1.0.0 .
-docker push ghcr.io/Prestwickuk/harold:v1.0.0
-```
+Deploy images by digest. The publishing workflow prints the immutable digest
+after every successful push.
 
 ### Deploy (production)
 
