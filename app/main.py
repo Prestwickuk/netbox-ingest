@@ -5,11 +5,13 @@ from fastapi.staticfiles import StaticFiles
 
 from app.database import engine
 from app.models.db import Base
+from app.security.tokens import validate_token_encryption_key
 from app.api import jobs, upload, netbox_instances, changelog
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_token_encryption_key()
     Base.metadata.create_all(bind=engine)
     yield
 

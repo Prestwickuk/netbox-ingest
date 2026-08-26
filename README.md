@@ -56,6 +56,7 @@ HAROLD accepts CSV or JSON files and ingests them into NetBox via the API, handl
 ### 1. Start the stack
 
 ```bash
+export HAROLD_TOKEN_ENCRYPTION_KEY="$(python -c 'import base64, secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())')"
 docker compose up --build
 ```
 
@@ -99,7 +100,10 @@ after every successful push.
 ### Deploy (production)
 
 1. Set your hostname in `k8s/overlays/production/kustomization.yaml` — replace `harold.example.com`
-2. Apply:
+2. Create the `harold-token-encryption` Secret through your production secret
+   manager. Its `HAROLD_TOKEN_ENCRYPTION_KEY` field must contain a Fernet key.
+   Use the same Secret for the app, worker, and migration job.
+3. Apply:
 
 ```bash
 kubectl apply -k k8s/overlays/production
@@ -135,6 +139,7 @@ All configuration is via environment variables. Docker Compose and the K8s manif
 | Variable | Default | Description |
 |---|---|---|
 | `DATABASE_URL` | `postgresql://netbox_ingest:netbox_ingest@localhost:5433/netbox_ingest` | PostgreSQL connection string |
+| `HAROLD_TOKEN_ENCRYPTION_KEY` | none | Fernet key used to encrypt saved and per-job NetBox tokens. Required by the app, worker, and migrations. |
 | `BATCH_SIZE` | `50` | Records claimed per worker iteration (overridable per job) |
 | `WORKER_POLL_INTERVAL` | `5` | Seconds the worker sleeps when no jobs are pending |
 | `RATE_LIMIT` | `0` (unlimited) | Global max NetBox API calls per second per worker (overridable per job) |
@@ -268,9 +273,13 @@ Your ingress proxy is cutting the connection. The bundled ingress manifest sets 
 **Alembic migration fails on existing database**
 If the app created tables via `create_all` before migrations were introduced, stamp the DB first then upgrade:
 ```bash
-alembic stamp head
+alembic stamp 0002
 alembic upgrade head
 ```
+Migration `0003` encrypts existing saved-instance and queued-job tokens. Back up the
+database first. Keep the encryption key available for both upgrade and downgrade.
+Before rolling back to a release that cannot decrypt tokens, run
+`alembic downgrade 0002` with the same key.
 If you see `column jobs.batch_size does not exist`, the columns were not added by `create_all` (it only creates tables, never alters them). Add them manually:
 ```bash
 docker compose exec db psql -U netbox_ingest -d netbox_ingest -c \

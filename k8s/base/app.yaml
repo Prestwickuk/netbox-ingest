@@ -36,6 +36,11 @@ spec:
                 secretKeyRef:
                   name: harold-db-secret
                   key: DATABASE_URL
+            - name: HAROLD_TOKEN_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: harold-token-encryption
+                  key: HAROLD_TOKEN_ENCRYPTION_KEY
           readinessProbe:
             httpGet:
               path: /

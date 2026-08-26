@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.config import BATCH_SIZE, WORKER_POLL_INTERVAL, RATE_LIMIT
 from app.database import SessionLocal
 from app.models.db import Job, Record
+from app.security.tokens import validate_token_encryption_key
 from app.worker.stages.racks import RackStage
 from app.worker.stages.rack_infra import RackInfraStage
 from app.worker.stages.patch_panels import PatchPanelStage
@@ -95,6 +96,7 @@ def process_job(job: Job) -> None:
 
 
 def run() -> None:
+    validate_token_encryption_key()
     log.info("Worker started")
     while True:
         with SessionLocal() as s:

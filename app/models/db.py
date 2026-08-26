@@ -16,9 +16,21 @@ class NetBoxInstance(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), unique=True)
     url: Mapped[str] = mapped_column(String(500))
-    token: Mapped[str] = mapped_column(String(500))
+    _token: Mapped[str] = mapped_column("token", Text)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    @property
+    def token(self) -> str:
+        from app.security.tokens import decrypt_token
+
+        return decrypt_token(self._token)
+
+    @token.setter
+    def token(self, value: str) -> None:
+        from app.security.tokens import encrypt_token
+
+        self._token = encrypt_token(value)
 
 
 class Job(Base):
@@ -33,7 +45,7 @@ class Job(Base):
     failed_count: Mapped[int] = mapped_column(Integer, default=0)
     skipped_count: Mapped[int] = mapped_column(Integer, default=0)
     netbox_url: Mapped[str] = mapped_column(String(500))
-    netbox_token: Mapped[str] = mapped_column(String(500))
+    _netbox_token: Mapped[str] = mapped_column("netbox_token", Text)
     batch_size: Mapped[int | None] = mapped_column(Integer, nullable=True)   # overrides env BATCH_SIZE if set
     rate_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)   # max records/sec per worker (0/None = unlimited)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)   # populated when job fails before/outside record processing
@@ -42,6 +54,18 @@ class Job(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     records: Mapped[list["Record"]] = relationship("Record", back_populates="job", cascade="all, delete-orphan")
+
+    @property
+    def netbox_token(self) -> str:
+        from app.security.tokens import decrypt_token
+
+        return decrypt_token(self._netbox_token)
+
+    @netbox_token.setter
+    def netbox_token(self, value: str) -> None:
+        from app.security.tokens import encrypt_token
+
+        self._netbox_token = encrypt_token(value)
 
     @property
     def processed_count(self) -> int:

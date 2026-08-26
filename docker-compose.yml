@@ -21,6 +21,7 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql://netbox_ingest:netbox_ingest@db:5432/netbox_ingest
+      HAROLD_TOKEN_ENCRYPTION_KEY: ${HAROLD_TOKEN_ENCRYPTION_KEY:?set HAROLD_TOKEN_ENCRYPTION_KEY}
     depends_on:
       db:
         condition: service_healthy
@@ -32,6 +33,7 @@ services:
     command: python -m app.worker.runner
     environment:
       DATABASE_URL: postgresql://netbox_ingest:netbox_ingest@db:5432/netbox_ingest
+      HAROLD_TOKEN_ENCRYPTION_KEY: ${HAROLD_TOKEN_ENCRYPTION_KEY:?set HAROLD_TOKEN_ENCRYPTION_KEY}
     depends_on:
       db:
         condition: service_healthy
