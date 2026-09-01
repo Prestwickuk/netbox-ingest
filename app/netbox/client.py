@@ -10,7 +10,7 @@ log = logging.getLogger(__name__)
 
 
 def _clean_token(token: str) -> str:
-    """Strip 'Token ' or 'Bearer ' prefixes — pynetbox builds the header itself."""
+    """Strip auth prefixes so pynetbox can select the scheme from the token format."""
     cleaned = (token or "").strip()
     for prefix in ("Token ", "Bearer "):
         if cleaned.lower().startswith(prefix.lower()):
