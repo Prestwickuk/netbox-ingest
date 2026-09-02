@@ -50,6 +50,8 @@ jobs:
     permissions:
       contents: read
       packages: write # publish the tested image to this repository's GHCR package
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - name: Check out code
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -93,3 +95,38 @@ jobs:
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: echo "published digest $DIGEST"
+
+  deploy:
+    name: Hand the digest to loft-prod
+    # `needs: publish` is the whole failed-publish guard: a publish that fails,
+    # is cancelled, or is skipped never reaches this job, so no deployment PR
+    # can describe an image that was not actually pushed.
+    needs: publish
+    # workflow_dispatch can run this workflow from any branch. Publishing a
+    # sha-tagged image from a feature branch is harmless, but opening a
+    # production deployment PR from one is not, so the handoff is limited to
+    # the refs that represent a real release.
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # The PR itself is opened by loft-prod's `update-harold-version`
+      # receiver, not from here. loft-prod owns which files pin the digest and
+      # which tests assert it, so that knowledge stays in the repo being
+      # edited, and no loft-prod write credential has to be readable here.
+      - name: Dispatch the deployment PR
+        uses: loft-sh/github-actions/.github/actions/repository-dispatch@repository-dispatch/v1 # zizmor: ignore[unpinned-uses]
+        with:
+          target-repo: loft-sh/loft-prod
+          event-type: update-harold-version
+          payload: |
+            {
+              "digest": "${{ needs.publish.outputs.digest }}",
+              "sha": "${{ github.sha }}",
+              "ref": "${{ github.ref_name }}"
+            }
+        env:
+          # GITHUB_TOKEN cannot dispatch into another repository. GH_ACCESS_TOKEN
+          # is the org-wide PAT already used for cross-repo deployment PRs.
+          GH_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
