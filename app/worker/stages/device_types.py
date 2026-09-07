@@ -94,14 +94,18 @@ class DeviceTypeStage(BaseStage):
     REQUIRED_FIELDS = ["yaml_text"]
 
     def process(self, session: Session, record: Record) -> None:
+        existing = None
+        complete = False
         try:
             data = parse_device_type_yaml(record.raw_data.get("yaml_text", ""))
             existing = self._find_existing(data)
+            complete = existing is not None and not self._missing_components(existing, data)
         except Exception:
-            super().process(session, record)  # let base error handling record the failure
-            return
+            # Fall through to super().process(): create() hits the same error
+            # inside the per-record handler, so the record fails instead of the job.
+            pass
 
-        if existing and not self._missing_components(existing, data):
+        if complete:
             url = f"{self.client.netbox_url}/dcim/device-types/{existing.id}/"
             self.skip(session, record, existing.id, url)
             return
@@ -112,7 +116,7 @@ class DeviceTypeStage(BaseStage):
 
         manufacturer = self._ensure_manufacturer(session, record, data["manufacturer"])
 
-        device_type = self._find_existing(data)
+        device_type = self._find_existing(data, manufacturer_id=manufacturer.id)
         if device_type:
             self.log_info(session, record, f"Device type already exists (id={device_type.id}), creating missing templates only")
         else:
@@ -154,15 +158,23 @@ class DeviceTypeStage(BaseStage):
 
         return device_type.id, f"{self.client.netbox_url}/dcim/device-types/{device_type.id}/"
 
-    def _find_existing(self, data: dict):
+    def _find_existing(self, data: dict, manufacturer_id: int | None = None):
+        """Look up the device type scoped to its manufacturer.
+
+        NetBox slugs and models are only unique per manufacturer, so an
+        unscoped slug lookup could match (and later mutate) another
+        manufacturer's device type.
+        """
+        if manufacturer_id is None:
+            manufacturer = self.client.nb.dcim.manufacturers.get(name=data["manufacturer"])
+            if not manufacturer:
+                return None
+            manufacturer_id = manufacturer.id
         slug = data.get("slug") or slugify(f"{data['manufacturer']} {data['model']}")
-        existing = self.client.nb.dcim.device_types.get(slug=slug)
-        if existing:
-            return existing
-        manufacturer = self.client.nb.dcim.manufacturers.get(name=data["manufacturer"])
-        if manufacturer:
-            return self.client.nb.dcim.device_types.get(model=data["model"], manufacturer_id=manufacturer.id)
-        return None
+        return (
+            self.client.nb.dcim.device_types.get(slug=slug, manufacturer_id=manufacturer_id)
+            or self.client.nb.dcim.device_types.get(model=data["model"], manufacturer_id=manufacturer_id)
+        )
 
     def _missing_components(self, device_type, data: dict) -> bool:
         """True if any template named in the YAML does not exist on the device type yet."""

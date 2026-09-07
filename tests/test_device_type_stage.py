@@ -88,13 +88,88 @@ class BuildComponentPayloadsTests(unittest.TestCase):
             build_component_payloads({"interfaces": [{"type": "1000base-t"}]})
 
 
+def _stage_with_mock_client() -> DeviceTypeStage:
+    with patch("app.worker.stages.base.NetBoxClient"):
+        stage = DeviceTypeStage("https://netbox.example.com", "token")
+    stage.client = MagicMock()
+    stage.client.netbox_url = "https://netbox.example.com"
+    return stage
+
+
+def _mock_all_templates_existing(nb) -> None:
+    """Make every template referenced by SAMPLE_YAML already exist in NetBox."""
+    def existing_filter_for(names):
+        existing = []
+        for i, n in enumerate(names):
+            obj = MagicMock(id=200 + i)
+            obj.name = n
+            existing.append(obj)
+        return existing
+
+    nb.dcim.console_port_templates.filter.return_value = existing_filter_for(["Rear Serial"])
+    nb.dcim.interface_templates.filter.return_value = existing_filter_for(["Gig-E 1", "iDRAC"])
+    nb.dcim.power_port_templates.filter.return_value = existing_filter_for(["PSU1"])
+    nb.dcim.power_outlet_templates.filter.return_value = existing_filter_for(["Outlet 1"])
+
+
+class FindExistingTests(unittest.TestCase):
+    def test_returns_none_when_manufacturer_absent(self) -> None:
+        stage = _stage_with_mock_client()
+        nb = stage.client.nb
+        nb.dcim.manufacturers.get.return_value = None
+
+        self.assertIsNone(stage._find_existing({"manufacturer": "Dell", "model": "X"}))
+        nb.dcim.device_types.get.assert_not_called()
+
+    def test_slug_lookup_is_scoped_to_manufacturer(self) -> None:
+        stage = _stage_with_mock_client()
+        nb = stage.client.nb
+        nb.dcim.manufacturers.get.return_value = MagicMock(id=7)
+        nb.dcim.device_types.get.return_value = MagicMock(id=42)
+
+        result = stage._find_existing(parse_device_type_yaml(SAMPLE_YAML))
+
+        self.assertEqual(result.id, 42)
+        nb.dcim.device_types.get.assert_called_once_with(
+            slug="dell-poweredge-r6615", manufacturer_id=7
+        )
+
+
+class DeviceTypeStageProcessTests(unittest.TestCase):
+    def test_skips_complete_duplicate(self) -> None:
+        stage = _stage_with_mock_client()
+        nb = stage.client.nb
+        nb.dcim.manufacturers.get.return_value = MagicMock(id=7)
+        nb.dcim.device_types.get.return_value = MagicMock(id=42)
+        _mock_all_templates_existing(nb)
+
+        record = MagicMock(id=uuid.uuid4())
+        record.raw_data = {"yaml_text": SAMPLE_YAML}
+        stage.process(MagicMock(), record)
+
+        self.assertEqual(record.status, "skipped")
+        self.assertEqual(record.netbox_id, 42)
+
+    def test_component_check_failure_fails_the_record_not_the_job(self) -> None:
+        """An API error during the duplicate pre-check must surface as a failed
+        record (retryable via Retry), never escape process() and kill the job."""
+        stage = _stage_with_mock_client()
+        nb = stage.client.nb
+        nb.dcim.manufacturers.get.return_value = MagicMock(id=7)
+        nb.dcim.device_types.get.return_value = MagicMock(id=42)
+        nb.dcim.console_port_templates.filter.side_effect = RuntimeError("NetBox API unreachable")
+
+        record = MagicMock(id=uuid.uuid4())
+        record.raw_data = {"yaml_text": SAMPLE_YAML}
+        stage.process(MagicMock(), record)  # must not raise
+
+        self.assertEqual(record.status, "failed")
+        self.assertIn("unreachable", record.error_message)
+
+
 class DeviceTypeStageCreateTests(unittest.TestCase):
     def _stage_with_mock_client(self) -> DeviceTypeStage:
-        with patch("app.worker.stages.base.NetBoxClient") as client_cls:
-            stage = DeviceTypeStage("https://netbox.example.com", "token")
-        stage.client = MagicMock()
-        stage.client.netbox_url = "https://netbox.example.com"
-        return stage
+        return _stage_with_mock_client()
 
     def test_create_resolves_power_port_reference(self) -> None:
         stage = self._stage_with_mock_client()
@@ -142,19 +217,7 @@ class DeviceTypeStageCreateTests(unittest.TestCase):
         nb.dcim.device_types.get.return_value = existing_dt
         nb.dcim.manufacturers.get.return_value = MagicMock(id=7)
 
-        # Everything already exists
-        def existing_filter_for(names):
-            existing = []
-            for i, n in enumerate(names):
-                obj = MagicMock(id=200 + i)
-                obj.name = n
-                existing.append(obj)
-            return existing
-
-        nb.dcim.console_port_templates.filter.return_value = existing_filter_for(["Rear Serial"])
-        nb.dcim.interface_templates.filter.return_value = existing_filter_for(["Gig-E 1", "iDRAC"])
-        nb.dcim.power_port_templates.filter.return_value = existing_filter_for(["PSU1"])
-        nb.dcim.power_outlet_templates.filter.return_value = existing_filter_for(["Outlet 1"])
+        _mock_all_templates_existing(nb)
 
         record = MagicMock(id=uuid.uuid4())
         record.raw_data = {"yaml_text": SAMPLE_YAML}
