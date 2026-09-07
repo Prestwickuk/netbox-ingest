@@ -16,6 +16,18 @@ def changelog(request: Request):
 
 CHANGELOG = [
     {
+        "version": "1.1.0",
+        "date": "2026-09-07",
+        "sections": {
+            "Added": [
+                "New Device Types page: browse the community devicetype-library on GitHub via manufacturer and model dropdowns, select one or more device types, and import them into NetBox — manufacturer, device type, and all component templates (interfaces, console ports, power ports/outlets, front/rear ports, module bays, device bays, inventory items) are created automatically.",
+                "Device-type YAML upload: the same page accepts one or more devicetype-library-format YAML files for custom or air-gapped definitions.",
+                "New `device_types` worker stage with the usual HAROLD idempotency — an existing device type with all its templates is skipped; a partial one is resumed by creating only the missing templates, so retries are safe.",
+                "The devicetype-library index is fetched with a single GitHub git-tree API call and cached (default 1 hour, `DEVICETYPE_LIBRARY_CACHE_TTL`); an optional `GITHUB_TOKEN` raises the GitHub rate limit, and `DEVICETYPE_LIBRARY_REPO` / `DEVICETYPE_LIBRARY_BRANCH` point HAROLD at a fork.",
+            ],
+        },
+    },
+    {
         "version": "1.0.9",
         "date": "2026-05-29",
         "sections": {

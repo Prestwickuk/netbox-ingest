@@ -1,0 +1,28 @@
+{% if error %}
+<div class="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-md text-sm">
+  {{ error }}
+</div>
+{% elif not models %}
+<p class="text-sm text-gray-400">No device types found for {{ manufacturer }}.</p>
+{% else %}
+<div class="space-y-2">
+  <div class="flex items-center gap-3">
+    <input type="text" placeholder="Filter models…" oninput="filterModels(this.value)"
+      class="flex-1 border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+    <button type="button" onclick="setAllModels(true)"
+      class="text-xs text-indigo-600 hover:underline">Select all</button>
+    <button type="button" onclick="setAllModels(false)"
+      class="text-xs text-gray-500 hover:underline">Clear</button>
+  </div>
+  <div class="max-h-64 overflow-y-auto border border-gray-200 rounded-md divide-y divide-gray-100">
+    {% for m in models %}
+    <label data-model="{{ m.model|lower }}"
+      class="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-gray-50 cursor-pointer">
+      <input type="checkbox" name="model_paths" value="{{ m.path }}" class="rounded">
+      {{ m.model }}
+    </label>
+    {% endfor %}
+  </div>
+  <p class="text-xs text-gray-400">{{ models|length }} device type(s) for {{ manufacturer }}</p>
+</div>
+{% endif %}

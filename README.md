@@ -23,6 +23,22 @@ HAROLD accepts CSV or JSON files and ingests them into NetBox via the API, handl
 | `power_feeds` | Power feeds from panel to rack, with electrical spec lookup by feed type |
 | `cables` | Direct device connections, device-to-patch-panel, patch-panel-to-patch-panel, PSU-to-PDU, console-port-to-console-server, and power-feed-to-PDU-input |
 | `ip_assignment` | IP allocation from IPAM prefixes across up to five interfaces per device, with primary IP designation |
+| `device_types` | Device types with all component templates, imported from the [community devicetype-library](https://github.com/netbox-community/devicetype-library) or from uploaded YAML |
+
+### Device-type library integration
+
+The **Device Types** page browses the [netbox-community/devicetype-library](https://github.com/netbox-community/devicetype-library) directly from GitHub: pick a manufacturer, tick one or more models, and HAROLD imports each definition into NetBox — creating the manufacturer if needed, the device type itself, and every component template it defines (interfaces, console ports, console server ports, power ports, power outlets, front/rear ports, module bays, device bays, and inventory items). The same page accepts uploaded YAML files in the devicetype-library format for custom hardware or air-gapped NetBox instances.
+
+Imports run through the normal job queue and are idempotent: a device type that already exists with all its templates is skipped, and a partially imported one is resumed by creating only the missing templates.
+
+Configuration (all optional, via environment variables):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DEVICETYPE_LIBRARY_REPO` | `netbox-community/devicetype-library` | GitHub repo to browse (use a fork for curated catalogues) |
+| `DEVICETYPE_LIBRARY_BRANCH` | `master` | Branch to read |
+| `DEVICETYPE_LIBRARY_CACHE_TTL` | `3600` | Seconds to cache the library index in memory |
+| `GITHUB_TOKEN` | _(unset)_ | Raises the GitHub API rate limit (60/hr unauthenticated); the index needs one API call per refresh |
 
 ### Key features
 
