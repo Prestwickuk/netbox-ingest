@@ -176,7 +176,7 @@ class DeviceTypeStage(BaseStage):
 
         for yaml_key, endpoint, payloads, ref_fields in build_component_payloads(data):
             api = getattr(self.client.nb.dcim, endpoint)
-            existing_objs = {t.name: t for t in api.filter(devicetype_id=device_type.id)}
+            existing_objs = {t.name: t for t in api.filter(device_type_id=device_type.id)}
             template_ids[endpoint] = {name: t.id for name, t in existing_objs.items()}
 
             to_create = []
@@ -234,7 +234,7 @@ class DeviceTypeStage(BaseStage):
         port_mappings = build_port_mappings(data)
         for _, endpoint, payloads, _ in build_component_payloads(data):
             api = getattr(self.client.nb.dcim, endpoint)
-            existing = {t.name: t for t in api.filter(devicetype_id=device_type.id)}
+            existing = {t.name: t for t in api.filter(device_type_id=device_type.id)}
             if any(p["name"] not in existing for p in payloads):
                 return True
             if endpoint == "front_port_templates" and port_mappings and self._netbox_supports_port_mappings():

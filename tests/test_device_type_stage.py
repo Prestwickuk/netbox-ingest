@@ -356,6 +356,58 @@ port-mappings:
         fronts[0].save.assert_not_called()
 
 
+class TemplateLookupScopingTests(unittest.TestCase):
+    """Two device types routinely share template names (PSU1, LAN1, DPU1...).
+    The existence lookups must filter by device_type_id — NetBox silently
+    ignores unknown query params (e.g. devicetype_id) and returns every
+    template in the instance, which made the stage skip components that only
+    existed on a previously imported device type."""
+
+    ENDPOINTS = ("console_port_templates", "interface_templates",
+                 "power_port_templates", "power_outlet_templates")
+
+    def _bulk_create(self, payloads):
+        created = []
+        for i, p in enumerate(payloads):
+            obj = MagicMock(id=100 + i)
+            obj.name = p["name"]
+            created.append(obj)
+        return created
+
+    def test_create_scopes_existing_template_lookup_to_device_type(self) -> None:
+        stage = _stage_with_mock_client()
+        nb = stage.client.nb
+        nb.dcim.device_types.get.return_value = None
+        nb.dcim.manufacturers.get.return_value = MagicMock(id=7)
+        nb.dcim.device_types.create.return_value = MagicMock(id=42)
+        for endpoint in self.ENDPOINTS:
+            api = getattr(nb.dcim, endpoint)
+            api.filter.return_value = []
+            api.create.side_effect = self._bulk_create
+
+        record = MagicMock(id=uuid.uuid4())
+        record.raw_data = {"yaml_text": SAMPLE_YAML}
+        stage.create(MagicMock(), record)
+
+        for endpoint in self.ENDPOINTS:
+            getattr(nb.dcim, endpoint).filter.assert_called_with(device_type_id=42)
+
+    def test_duplicate_precheck_scopes_lookup_to_device_type(self) -> None:
+        stage = _stage_with_mock_client()
+        nb = stage.client.nb
+        nb.dcim.manufacturers.get.return_value = MagicMock(id=7)
+        nb.dcim.device_types.get.return_value = MagicMock(id=42)
+        _mock_all_templates_existing(nb)
+
+        record = MagicMock(id=uuid.uuid4())
+        record.raw_data = {"yaml_text": SAMPLE_YAML}
+        stage.process(MagicMock(), record)
+
+        self.assertEqual(record.status, "skipped")
+        for endpoint in self.ENDPOINTS:
+            getattr(nb.dcim, endpoint).filter.assert_called_with(device_type_id=42)
+
+
 class FindExistingTests(unittest.TestCase):
     def test_returns_none_when_manufacturer_absent(self) -> None:
         stage = _stage_with_mock_client()
