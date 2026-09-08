@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Device Types — HAROLD{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+  <h1 class="text-2xl font-semibold mb-1">Import Device Types</h1>
+  <p class="text-sm text-gray-500 mb-6">
+    Pull device-type definitions (with interface, power, console and port templates) from the community
+    <a href="https://github.com/netbox-community/devicetype-library" target="_blank" rel="noopener"
+      class="text-indigo-600 hover:underline">devicetype-library</a>
+    into NetBox, or upload your own YAML definitions.
+  </p>
+
+  {% if error %}
+  <div class="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
+    {{ error }}
+  </div>
+  {% endif %}
+
+  <form action="/device-types/import" method="post" enctype="multipart/form-data"
+    class="bg-white rounded-lg shadow p-6 space-y-5">
+
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Job name</label>
+      <input type="text" name="job_name"
+        value="{{ form.job_name if form else '' }}"
+        placeholder="e.g. Dell PowerEdge device types"
+        class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+      <p class="mt-1 text-xs text-gray-400">Optional — a name is generated if left blank</p>
+    </div>
+
+    <!-- Library browser -->
+    <fieldset class="border border-gray-200 rounded-md p-4 space-y-4">
+      <legend class="text-sm font-medium text-gray-700 px-1">Browse the device-type library</legend>
+
+      <div id="manufacturer-box"
+        hx-get="/device-types/manufacturers" hx-trigger="load" hx-swap="innerHTML">
+        <p class="text-sm text-gray-400 animate-pulse">Loading manufacturers from GitHub…</p>
+      </div>
+
+      <div id="model-list"></div>
+    </fieldset>
+
+    <!-- Manual upload -->
+    <fieldset class="border border-gray-200 rounded-md p-4">
+      <legend class="text-sm font-medium text-gray-700 px-1">Or upload YAML definitions</legend>
+      <input type="file" name="yaml_files" accept=".yaml,.yml" multiple
+        class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+      <p class="mt-1 text-xs text-gray-400">
+        Same format as the devicetype-library — one device type per file
+      </p>
+    </fieldset>
+
+    <!-- NetBox connection -->
+    <fieldset class="border border-gray-200 rounded-md p-4 space-y-4">
+      <legend class="text-sm font-medium text-gray-700 px-1">NetBox connection</legend>
+
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Instance</label>
+        <select name="netbox_source" id="netbox_source"
+          onchange="toggleCustomFields(this.value)"
+          class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="custom">— Custom URL / token —</option>
+          {% for inst in instances %}
+          <option value="{{ inst.id }}" {% if inst.is_default %}selected{% endif %}>
+            {{ inst.name }}{% if inst.is_default %} (default){% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div id="custom-fields" class="space-y-4 {% if instances and instances|selectattr('is_default')|list %}hidden{% endif %}">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">NetBox URL</label>
+          <input type="url" name="netbox_url"
+            value="{{ form.netbox_url if form else '' }}"
+            placeholder="http://localhost:8080"
+            class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">NetBox API token</label>
+          <input type="password" name="netbox_token"
+            class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+      </div>
+    </fieldset>
+
+    <button type="submit"
+      class="w-full bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700">
+      Import &amp; Queue
+    </button>
+
+  </form>
+</div>
+
+<script>
+function toggleCustomFields(val) {
+  document.getElementById("custom-fields").classList.toggle("hidden", val !== "custom");
+}
+function filterModels(query) {
+  query = query.toLowerCase();
+  document.querySelectorAll("#model-list label[data-model]").forEach(function (el) {
+    el.classList.toggle("hidden", !el.dataset.model.includes(query));
+  });
+}
+function setAllModels(checked) {
+  document.querySelectorAll("#model-list label[data-model]:not(.hidden) input[type=checkbox]")
+    .forEach(function (cb) { cb.checked = checked; });
+}
+</script>
+{% endblock %}
