@@ -16,6 +16,19 @@ def changelog(request: Request):
 
 CHANGELOG = [
     {
+        "version": "1.2.0",
+        "date": "2026-09-09",
+        "sections": {
+            "Added": [
+                "Device-type imports now create front-to-rear port mappings via NetBox 4.5's PortMapping model (the `rear_ports` list on front port templates), reading both the devicetype-library's top-level `port-mappings` YAML block and the legacy inline `rear_port`/`rear_port_position` fields from older YAML files.",
+            ],
+            "Fixed": [
+                "Front port templates imported into NetBox 4.5+ silently lost their rear-port mappings: the API dropped the removed inline `rear_port`/`rear_port_position` fields without erroring. The stage now detects the NetBox version per job and emits `rear_ports` mappings on 4.5+, falling back to the legacy inline format on 4.3/4.4 — where multiple mappings, front-port positions beyond 1, or multi-position front ports are rejected with a clear error, since older NetBox cannot model them.",
+                "Re-importing a device type repairs front port templates that an earlier HAROLD left with empty mappings: existing front ports whose YAML defines mappings but which have none get the mappings added in place. Front ports that already carry any mapping are left untouched.",
+            ],
+        },
+    },
+    {
         "version": "1.1.0",
         "date": "2026-09-07",
         "sections": {
