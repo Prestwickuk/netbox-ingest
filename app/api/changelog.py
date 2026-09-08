@@ -16,6 +16,17 @@ def changelog(request: Request):
 
 CHANGELOG = [
     {
+        "version": "1.3.0",
+        "date": "2026-09-08",
+        "sections": {
+            "Added": [
+                "Module-type imports: the Device Types page now browses the devicetype-library's module-types/ tree (a Device types / Module types toggle above the manufacturer dropdown) and imports module-type definitions — cassettes, DPUs, NICs, PSUs, line cards — with their interface, power, console and front/rear port templates, including NetBox 4.5 port mappings on front port templates.",
+                "Uploaded YAML files are classified as device types or module types automatically (module types carry no slug or u_height); an explicit selector on the upload form overrides the detection for ambiguous hand-written files.",
+                "Module-type imports get the same idempotency as device types: complete duplicates are skipped, partial imports are resumed by creating only the missing templates, and existence lookups are scoped by manufacturer and module_type_id.",
+            ],
+        },
+    },
+    {
         "version": "1.2.0",
         "date": "2026-09-09",
         "sections": {

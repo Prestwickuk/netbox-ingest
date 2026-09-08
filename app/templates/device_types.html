@@ -3,9 +3,9 @@
 
 {% block content %}
 <div class="max-w-2xl mx-auto">
-  <h1 class="text-2xl font-semibold mb-1">Import Device Types</h1>
+  <h1 class="text-2xl font-semibold mb-1">Import Device &amp; Module Types</h1>
   <p class="text-sm text-gray-500 mb-6">
-    Pull device-type definitions (with interface, power, console and port templates) from the community
+    Pull device-type and module-type definitions (with interface, power, console and port templates) from the community
     <a href="https://github.com/netbox-community/devicetype-library" target="_blank" rel="noopener"
       class="text-indigo-600 hover:underline">devicetype-library</a>
     into NetBox, or upload your own YAML definitions.
@@ -33,8 +33,25 @@
     <fieldset class="border border-gray-200 rounded-md p-4 space-y-4">
       <legend class="text-sm font-medium text-gray-700 px-1">Browse the device-type library</legend>
 
+      <div class="flex items-center gap-4 text-sm">
+        <label class="flex items-center gap-1.5 cursor-pointer">
+          <input type="radio" name="library_section" value="device-types" checked
+            hx-get="/device-types/manufacturers?section=device-types"
+            hx-target="#manufacturer-box" hx-swap="innerHTML"
+            onclick="document.getElementById('model-list').innerHTML=''">
+          Device types
+        </label>
+        <label class="flex items-center gap-1.5 cursor-pointer">
+          <input type="radio" name="library_section" value="module-types"
+            hx-get="/device-types/manufacturers?section=module-types"
+            hx-target="#manufacturer-box" hx-swap="innerHTML"
+            onclick="document.getElementById('model-list').innerHTML=''">
+          Module types
+        </label>
+      </div>
+
       <div id="manufacturer-box"
-        hx-get="/device-types/manufacturers" hx-trigger="load" hx-swap="innerHTML">
+        hx-get="/device-types/manufacturers?section=device-types" hx-trigger="load" hx-swap="innerHTML">
         <p class="text-sm text-gray-400 animate-pulse">Loading manufacturers from GitHub…</p>
       </div>
 
@@ -42,12 +59,21 @@
     </fieldset>
 
     <!-- Manual upload -->
-    <fieldset class="border border-gray-200 rounded-md p-4">
+    <fieldset class="border border-gray-200 rounded-md p-4 space-y-3">
       <legend class="text-sm font-medium text-gray-700 px-1">Or upload YAML definitions</legend>
       <input type="file" name="yaml_files" accept=".yaml,.yml" multiple
         class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Uploaded files are</label>
+        <select name="yaml_kind"
+          class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="auto" selected>Auto-detect (device types carry slug/u_height)</option>
+          <option value="device">Device types</option>
+          <option value="module">Module types</option>
+        </select>
+      </div>
       <p class="mt-1 text-xs text-gray-400">
-        Same format as the devicetype-library — one device type per file
+        Same format as the devicetype-library — one device or module type per file
       </p>
     </fieldset>
 
