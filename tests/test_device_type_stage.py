@@ -257,6 +257,104 @@ class PortMappingCreateTests(unittest.TestCase):
             stage.create(MagicMock(), self._record(multi_yaml))
         self.assertIn("4.5+", str(ctx.exception))
 
+    def test_nondefault_front_position_rejected_on_older_netbox(self) -> None:
+        stage = self._panel_stage("4.3.5")
+        yaml_text = """\
+manufacturer: X
+model: Pos2 Panel
+rear-ports:
+  - name: R1
+    type: 8p8c
+front-ports:
+  - name: F1
+    type: 8p8c
+    positions: 2
+port-mappings:
+  - front_port: F1
+    front_port_position: 2
+    rear_port: R1
+    rear_port_position: 1
+"""
+        with self.assertRaises(ValueError) as ctx:
+            stage.create(MagicMock(), self._record(yaml_text))
+        self.assertIn("4.5+", str(ctx.exception))
+
+    def test_multi_position_front_port_rejected_on_older_netbox(self) -> None:
+        stage = self._panel_stage("4.4.1")
+        yaml_text = """\
+manufacturer: X
+model: MPO Breakout
+rear-ports:
+  - name: R1
+    type: mpo
+    positions: 12
+front-ports:
+  - name: F1
+    type: lc
+    positions: 4
+port-mappings:
+  - front_port: F1
+    front_port_position: 1
+    rear_port: R1
+    rear_port_position: 1
+"""
+        with self.assertRaises(ValueError) as ctx:
+            stage.create(MagicMock(), self._record(yaml_text))
+        self.assertIn("4.5+", str(ctx.exception))
+
+    def _front_templates(self, stage, rear_ports_value):
+        """Existing MPO-1 rear template plus LC-1/LC-2 front templates carrying
+        the given rear_ports value (e.g. [] to model a broken 1.1.0 import)."""
+        nb = stage.client.nb
+        rear = MagicMock(id=100)
+        rear.name = "MPO-1"
+        nb.dcim.rear_port_templates.filter.return_value = [rear]
+        fronts = []
+        for i, name in enumerate(("LC-1", "LC-2")):
+            obj = MagicMock(id=201 + i)
+            obj.name = name
+            obj.rear_ports = list(rear_ports_value)
+            fronts.append(obj)
+        nb.dcim.front_port_templates.filter.return_value = fronts
+        return fronts
+
+    def test_repairs_existing_front_ports_with_empty_mappings(self) -> None:
+        stage = self._panel_stage("4.7.2")
+        stage.client.nb.dcim.device_types.get.return_value = MagicMock(id=42)
+        fronts = self._front_templates(stage, rear_ports_value=[])
+
+        stage.create(MagicMock(), self._record(PANEL_YAML))
+
+        stage.client.nb.dcim.front_port_templates.create.assert_not_called()
+        self.assertEqual(fronts[0].rear_ports,
+                         [{"position": 1, "rear_port": 100, "rear_port_position": 1}])
+        self.assertEqual(fronts[1].rear_ports,
+                         [{"position": 1, "rear_port": 100, "rear_port_position": 2}])
+        fronts[0].save.assert_called_once()
+        fronts[1].save.assert_called_once()
+
+    def test_empty_mappings_make_process_resume_instead_of_skip(self) -> None:
+        stage = self._panel_stage("4.7.2")
+        stage.client.nb.dcim.device_types.get.return_value = MagicMock(id=42)
+        self._front_templates(stage, rear_ports_value=[])
+
+        record = self._record(PANEL_YAML)
+        stage.process(MagicMock(), record)
+
+        self.assertEqual(record.status, "success")
+
+    def test_existing_mappings_left_untouched_and_skipped(self) -> None:
+        stage = self._panel_stage("4.7.2")
+        stage.client.nb.dcim.device_types.get.return_value = MagicMock(id=42)
+        fronts = self._front_templates(
+            stage, rear_ports_value=[{"position": 1, "rear_port": 100, "rear_port_position": 9}])
+
+        record = self._record(PANEL_YAML)
+        stage.process(MagicMock(), record)
+
+        self.assertEqual(record.status, "skipped")
+        fronts[0].save.assert_not_called()
+
 
 class FindExistingTests(unittest.TestCase):
     def test_returns_none_when_manufacturer_absent(self) -> None:

@@ -31,7 +31,7 @@ The **Device Types** page browses the [netbox-community/devicetype-library](http
 
 Imports run through the normal job queue and are idempotent: a device type that already exists with all its templates is skipped, and a partially imported one is resumed by creating only the missing templates.
 
-Front-to-rear port mappings use NetBox 4.5's PortMapping model (the `rear_ports` list on front port templates). Both YAML formats are accepted: the library's current top-level `port-mappings` block and the legacy inline `rear_port`/`rear_port_position` fields on front-ports entries. Against NetBox 4.3/4.4 the stage detects the version and falls back to the legacy inline API format — multiple mappings per front port need NetBox 4.5+.
+Front-to-rear port mappings use NetBox 4.5's PortMapping model (the `rear_ports` list on front port templates). Both YAML formats are accepted: the library's current top-level `port-mappings` block and the legacy inline `rear_port`/`rear_port_position` fields on front-ports entries. Against NetBox 4.3/4.4 the stage detects the version and falls back to the legacy inline API format — multiple mappings and front-port positions need NetBox 4.5+. Re-importing a device type also repairs front port templates that were left with empty mappings by an earlier HAROLD version, without touching ports that already carry a mapping.
 
 Configuration (all optional, via environment variables):
 

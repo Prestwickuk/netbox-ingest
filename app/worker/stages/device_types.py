@@ -176,12 +176,12 @@ class DeviceTypeStage(BaseStage):
 
         for yaml_key, endpoint, payloads, ref_fields in build_component_payloads(data):
             api = getattr(self.client.nb.dcim, endpoint)
-            existing_templates = {t.name: t.id for t in api.filter(devicetype_id=device_type.id)}
-            template_ids[endpoint] = dict(existing_templates)
+            existing_objs = {t.name: t for t in api.filter(devicetype_id=device_type.id)}
+            template_ids[endpoint] = {name: t.id for name, t in existing_objs.items()}
 
             to_create = []
             for payload in payloads:
-                if payload["name"] in existing_templates:
+                if payload["name"] in existing_objs:
                     continue
                 resolved = dict(payload, device_type=device_type.id)
                 for ref_field, ref_endpoint in ref_fields.items():
@@ -203,6 +203,9 @@ class DeviceTypeStage(BaseStage):
             skipped = len(payloads) - len(to_create)
             if skipped:
                 self.log_info(session, record, f"Skipped {skipped} existing {yaml_key} template(s)")
+            if endpoint == "front_port_templates":
+                self._repair_missing_mappings(
+                    session, record, payloads, existing_objs, port_mappings, template_ids)
 
         return device_type.id, f"{self.client.netbox_url}/dcim/device-types/{device_type.id}/"
 
@@ -225,20 +228,24 @@ class DeviceTypeStage(BaseStage):
         )
 
     def _missing_components(self, device_type, data: dict) -> bool:
-        """True if any template named in the YAML does not exist on the device type yet."""
+        """True if any template named in the YAML does not exist on the device type
+        yet, or an existing front port lacks the rear-port mappings the YAML
+        defines (left empty by imports made before port-mapping support)."""
+        port_mappings = build_port_mappings(data)
         for _, endpoint, payloads, _ in build_component_payloads(data):
             api = getattr(self.client.nb.dcim, endpoint)
-            existing = {t.name for t in api.filter(devicetype_id=device_type.id)}
+            existing = {t.name: t for t in api.filter(devicetype_id=device_type.id)}
             if any(p["name"] not in existing for p in payloads):
                 return True
+            if endpoint == "front_port_templates" and port_mappings and self._netbox_supports_port_mappings():
+                for p in payloads:
+                    if port_mappings.get(p["name"]) and not getattr(existing[p["name"]], "rear_ports", None):
+                        return True
         return False
 
-    def _attach_rear_port_mappings(self, session: Session, record: Record, payload: dict,
-                                   port_mappings: dict, template_ids: dict) -> None:
-        mappings = port_mappings.get(payload["name"])
-        if not mappings:
-            return
-        resolved = [
+    def _resolve_mappings(self, session: Session, record: Record,
+                          mappings: list[dict], template_ids: dict) -> list[dict]:
+        return [
             {
                 "position": m["position"],
                 "rear_port": self._resolve_ref(
@@ -249,17 +256,52 @@ class DeviceTypeStage(BaseStage):
             }
             for m in mappings
         ]
+
+    def _attach_rear_port_mappings(self, session: Session, record: Record, payload: dict,
+                                   port_mappings: dict, template_ids: dict) -> None:
+        mappings = port_mappings.get(payload["name"])
+        if not mappings:
+            return
+        resolved = self._resolve_mappings(session, record, mappings, template_ids)
         if self._netbox_supports_port_mappings():
             payload["rear_ports"] = resolved
-        else:
-            if len(resolved) > 1:
-                raise ValueError(
-                    f"Front port '{payload['name']}' has {len(resolved)} rear-port mappings, "
-                    f"but NetBox {self._netbox_version} supports only one per front port (4.5+ required)"
-                )
-            payload.pop("positions", None)  # front port templates gained 'positions' in 4.5
-            payload["rear_port"] = resolved[0]["rear_port"]
-            payload["rear_port_position"] = resolved[0]["rear_port_position"]
+            return
+        # Pre-4.5 NetBox models exactly one position-1 mapping inline on the
+        # front port; anything richer would import with silently different
+        # connectivity, so reject it instead.
+        if (len(resolved) > 1
+                or resolved[0]["position"] != 1
+                or int(payload.get("positions") or 1) > 1):
+            raise ValueError(
+                f"Front port '{payload['name']}' uses multiple mappings or front-port "
+                f"positions, which NetBox {self._netbox_version} cannot model (4.5+ required)"
+            )
+        payload.pop("positions", None)  # front port templates gained 'positions' in 4.5
+        payload["rear_port"] = resolved[0]["rear_port"]
+        payload["rear_port_position"] = resolved[0]["rear_port_position"]
+
+    def _repair_missing_mappings(self, session: Session, record: Record, payloads: list[dict],
+                                 existing_objs: dict, port_mappings: dict, template_ids: dict) -> None:
+        """Fill in rear-port mappings on existing front port templates that have
+        none — HAROLD 1.1.0 sent the pre-4.5 inline fields, which NetBox 4.5+
+        silently dropped, so re-importing repairs those device types. Templates
+        that already have any mapping are left untouched."""
+        if not self._netbox_supports_port_mappings():
+            return  # pre-4.5 NetBox cannot create a front port without a mapping
+        repaired = 0
+        for payload in payloads:
+            template = existing_objs.get(payload["name"])
+            if template is None or getattr(template, "rear_ports", None):
+                continue
+            mappings = port_mappings.get(payload["name"])
+            if not mappings:
+                continue
+            template.rear_ports = self._resolve_mappings(session, record, mappings, template_ids)
+            template.save()
+            repaired += 1
+        if repaired:
+            self.log_info(session, record,
+                          f"Added missing rear-port mappings to {repaired} existing front-ports template(s)")
 
     def _netbox_supports_port_mappings(self) -> bool:
         if self._supports_port_mappings is None:
