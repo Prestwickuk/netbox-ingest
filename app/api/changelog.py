@@ -24,6 +24,7 @@ CHANGELOG = [
                 "Device-type YAML upload: the same page accepts one or more devicetype-library-format YAML files for custom or air-gapped definitions.",
                 "New `device_types` worker stage with the usual HAROLD idempotency — an existing device type with all its templates is skipped; a partial one is resumed by creating only the missing templates, so retries are safe.",
                 "The devicetype-library index is fetched with a single GitHub git-tree API call and cached (default 1 hour, `DEVICETYPE_LIBRARY_CACHE_TTL`); an optional `GITHUB_TOKEN` raises the GitHub rate limit, and `DEVICETYPE_LIBRARY_REPO` / `DEVICETYPE_LIBRARY_BRANCH` point HAROLD at a fork.",
+                "Front-to-rear port mappings use NetBox 4.5's PortMapping model (`rear_ports` on front port templates), reading both the library's top-level `port-mappings` YAML block and the legacy inline `rear_port`/`rear_port_position` fields; on NetBox 4.3/4.4 the stage detects the version and falls back to the legacy inline API format.",
             ],
         },
     },

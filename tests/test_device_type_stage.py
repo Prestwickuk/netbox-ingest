@@ -6,6 +6,7 @@ from app.worker.stages.device_types import (
     DeviceTypeStage,
     build_component_payloads,
     build_device_type_payload,
+    build_port_mappings,
     parse_device_type_yaml,
 )
 
@@ -35,6 +36,51 @@ power-outlets:
   - name: Outlet 1
     type: iec-60320-c13
     power_port: PSU1
+"""
+
+
+# Current devicetype-library format: mappings live in a top-level
+# 'port-mappings' list (matches NetBox 4.5's PortMapping model)
+PANEL_YAML = """\
+manufacturer: FS
+model: FHD Test Cassette
+slug: fs-fhd-test-cassette
+u_height: 0
+rear-ports:
+  - name: MPO-1
+    type: mpo
+    positions: 12
+front-ports:
+  - name: LC-1
+    type: lc
+    positions: 1
+  - name: LC-2
+    type: lc
+    positions: 1
+port-mappings:
+  - front_port: LC-1
+    front_port_position: 1
+    rear_port: MPO-1
+    rear_port_position: 1
+  - front_port: LC-2
+    front_port_position: 1
+    rear_port: MPO-1
+    rear_port_position: 2
+"""
+
+# Pre-NetBox-4.5 library format: rear_port/rear_port_position inline on the
+# front-ports entries
+LEGACY_PANEL_YAML = """\
+manufacturer: Generic
+model: 24-port panel
+rear-ports:
+  - name: Rear 1
+    type: 8p8c
+front-ports:
+  - name: Front 1
+    type: 8p8c
+    rear_port: Rear 1
+    rear_port_position: 1
 """
 
 
@@ -110,6 +156,106 @@ def _mock_all_templates_existing(nb) -> None:
     nb.dcim.interface_templates.filter.return_value = existing_filter_for(["Gig-E 1", "iDRAC"])
     nb.dcim.power_port_templates.filter.return_value = existing_filter_for(["PSU1"])
     nb.dcim.power_outlet_templates.filter.return_value = existing_filter_for(["Outlet 1"])
+
+
+class BuildPortMappingsTests(unittest.TestCase):
+    def test_modern_port_mappings_list(self) -> None:
+        mappings = build_port_mappings(parse_device_type_yaml(PANEL_YAML))
+        self.assertEqual(mappings["LC-1"], [{"position": 1, "rear_port": "MPO-1", "rear_port_position": 1}])
+        self.assertEqual(mappings["LC-2"], [{"position": 1, "rear_port": "MPO-1", "rear_port_position": 2}])
+
+    def test_legacy_inline_rear_port_fields(self) -> None:
+        mappings = build_port_mappings(parse_device_type_yaml(LEGACY_PANEL_YAML))
+        self.assertEqual(mappings["Front 1"], [{"position": 1, "rear_port": "Rear 1", "rear_port_position": 1}])
+
+    def test_front_port_without_mapping_is_absent(self) -> None:
+        data = parse_device_type_yaml(PANEL_YAML)
+        data["port-mappings"] = data["port-mappings"][:1]
+        self.assertNotIn("LC-2", build_port_mappings(data))
+
+    def test_unknown_front_port_raises(self) -> None:
+        data = parse_device_type_yaml(PANEL_YAML)
+        data["port-mappings"][0]["front_port"] = "LC-99"
+        with self.assertRaises(ValueError) as ctx:
+            build_port_mappings(data)
+        self.assertIn("LC-99", str(ctx.exception))
+
+    def test_entry_missing_rear_port_raises(self) -> None:
+        data = parse_device_type_yaml(PANEL_YAML)
+        del data["port-mappings"][0]["rear_port"]
+        with self.assertRaises(ValueError):
+            build_port_mappings(data)
+
+    def test_legacy_rear_port_is_stripped_from_front_port_payload(self) -> None:
+        components = build_component_payloads(parse_device_type_yaml(LEGACY_PANEL_YAML))
+        by_endpoint = {endpoint: payloads for _, endpoint, payloads, _ in components}
+        front = by_endpoint["front_port_templates"][0]
+        self.assertNotIn("rear_port", front)
+        self.assertNotIn("rear_port_position", front)
+
+
+class PortMappingCreateTests(unittest.TestCase):
+    def _panel_stage(self, netbox_version: str) -> DeviceTypeStage:
+        stage = _stage_with_mock_client()
+        nb = stage.client.nb
+        stage.client.test_connection.return_value = netbox_version
+        nb.dcim.device_types.get.return_value = None
+        nb.dcim.manufacturers.get.return_value = MagicMock(id=7)
+        nb.dcim.device_types.create.return_value = MagicMock(id=42)
+
+        def bulk_create(payloads):
+            created = []
+            for i, p in enumerate(payloads):
+                obj = MagicMock(id=100 + i)
+                obj.name = p["name"]
+                created.append(obj)
+            return created
+
+        for endpoint in ("rear_port_templates", "front_port_templates"):
+            api = getattr(nb.dcim, endpoint)
+            api.filter.return_value = []
+            api.create.side_effect = bulk_create
+        return stage
+
+    def _record(self, yaml_text: str) -> MagicMock:
+        record = MagicMock(id=uuid.uuid4())
+        record.raw_data = {"yaml_text": yaml_text}
+        return record
+
+    def test_netbox_45_plus_uses_rear_ports_mappings(self) -> None:
+        stage = self._panel_stage("4.7.2")
+        stage.create(MagicMock(), self._record(PANEL_YAML))
+
+        front_payloads = stage.client.nb.dcim.front_port_templates.create.call_args.args[0]
+        by_name = {p["name"]: p for p in front_payloads}
+        self.assertEqual(by_name["LC-1"]["rear_ports"],
+                         [{"position": 1, "rear_port": 100, "rear_port_position": 1}])
+        self.assertEqual(by_name["LC-2"]["rear_ports"],
+                         [{"position": 1, "rear_port": 100, "rear_port_position": 2}])
+        self.assertEqual(by_name["LC-1"]["positions"], 1)
+        self.assertNotIn("rear_port", by_name["LC-1"])
+
+    def test_older_netbox_falls_back_to_inline_format(self) -> None:
+        stage = self._panel_stage("4.3.5")
+        stage.create(MagicMock(), self._record(LEGACY_PANEL_YAML))
+
+        front_payloads = stage.client.nb.dcim.front_port_templates.create.call_args.args[0]
+        self.assertEqual(front_payloads[0]["rear_port"], 100)
+        self.assertEqual(front_payloads[0]["rear_port_position"], 1)
+        self.assertNotIn("rear_ports", front_payloads[0])
+        self.assertNotIn("positions", front_payloads[0])
+
+    def test_multiple_mappings_per_front_port_rejected_on_older_netbox(self) -> None:
+        stage = self._panel_stage("4.4.1")
+        multi_yaml = PANEL_YAML + """\
+  - front_port: LC-1
+    front_port_position: 1
+    rear_port: MPO-1
+    rear_port_position: 3
+"""
+        with self.assertRaises(ValueError) as ctx:
+            stage.create(MagicMock(), self._record(multi_yaml))
+        self.assertIn("4.5+", str(ctx.exception))
 
 
 class FindExistingTests(unittest.TestCase):

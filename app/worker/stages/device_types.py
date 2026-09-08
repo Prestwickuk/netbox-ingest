@@ -1,4 +1,5 @@
 import logging
+import re
 
 import yaml
 from sqlalchemy.orm import Session
@@ -33,7 +34,7 @@ COMPONENT_SPECS = [
     ("console-server-ports", "console_server_port_templates", ["name", "label", "type", "description"], {}),
     ("power-ports", "power_port_templates", ["name", "label", "type", "maximum_draw", "allocated_draw", "description"], {}),
     ("rear-ports", "rear_port_templates", ["name", "label", "type", "color", "positions", "description"], {}),
-    ("front-ports", "front_port_templates", ["name", "label", "type", "color", "rear_port_position", "description"], {"rear_port": "rear_port_templates"}),
+    ("front-ports", "front_port_templates", ["name", "label", "type", "color", "positions", "description"], {}),
     ("power-outlets", "power_outlet_templates", ["name", "label", "type", "feed_leg", "description"], {"power_port": "power_port_templates"}),
     ("interfaces", "interface_templates", ["name", "label", "type", "mgmt_only", "enabled", "poe_mode", "poe_type", "description"], {}),
     ("module-bays", "module_bay_templates", ["name", "label", "position", "description"], {}),
@@ -90,8 +91,52 @@ def build_component_payloads(data: dict) -> list[tuple[str, str, list[dict], dic
     return result
 
 
+def build_port_mappings(data: dict) -> dict[str, list[dict]]:
+    """Collect front-to-rear port mappings keyed by front port name.
+
+    Reads the top-level 'port-mappings' list (the devicetype-library format
+    matching NetBox 4.5's PortMapping model) and, for backwards compatibility
+    with pre-4.5 YAML, inline 'rear_port'/'rear_port_position' fields on
+    front-ports entries. Rear ports stay as names; the stage resolves them to
+    template ids at create time.
+    """
+    front_names = {i.get("name") for i in (data.get("front-ports") or []) if isinstance(i, dict)}
+    mappings: dict[str, list[dict]] = {}
+
+    def add(source: str, front_port, front_position, rear_port, rear_position) -> None:
+        if front_port not in front_names:
+            raise ValueError(f"{source} references front port '{front_port}' which is not defined in the YAML")
+        mappings.setdefault(front_port, []).append({
+            "position": int(front_position),
+            "rear_port": rear_port,
+            "rear_port_position": int(rear_position),
+        })
+
+    for item in data.get("front-ports") or []:
+        if isinstance(item, dict) and item.get("rear_port"):
+            add("'front-ports' entry", item.get("name"), 1,
+                item["rear_port"], item.get("rear_port_position") or 1)
+
+    entries = data.get("port-mappings") or []
+    if not isinstance(entries, list):
+        raise ValueError("Invalid device-type YAML: 'port-mappings' must be a list")
+    for entry in entries:
+        if not isinstance(entry, dict) or not entry.get("front_port") or not entry.get("rear_port"):
+            raise ValueError("Invalid 'port-mappings' entry: 'front_port' and 'rear_port' are required")
+        add("'port-mappings' entry", entry["front_port"], entry.get("front_port_position") or 1,
+            entry["rear_port"], entry.get("rear_port_position") or 1)
+
+    return mappings
+
+
 class DeviceTypeStage(BaseStage):
     REQUIRED_FIELDS = ["yaml_text"]
+
+    # NetBox 4.5 replaced FrontPort(Template).rear_port/rear_port_position with
+    # PortMapping, exposed as a 'rear_ports' list on front ports. Detected once
+    # per job so older instances still get the legacy inline format.
+    _supports_port_mappings: bool | None = None
+    _netbox_version: str = "unknown"
 
     def process(self, session: Session, record: Record) -> None:
         existing = None
@@ -124,9 +169,10 @@ class DeviceTypeStage(BaseStage):
             device_type = self.client.nb.dcim.device_types.create(**payload)
             self.log_info(session, record, f"Created device type '{data['model']}' (id={device_type.id})")
 
-        # Track created/existing template ids so name refs (front->rear port,
+        # Track created/existing template ids so name refs (port mappings,
         # outlet->power port) resolve without extra lookups.
         template_ids: dict[str, dict[str, int]] = {}
+        port_mappings = build_port_mappings(data)
 
         for yaml_key, endpoint, payloads, ref_fields in build_component_payloads(data):
             api = getattr(self.client.nb.dcim, endpoint)
@@ -145,6 +191,8 @@ class DeviceTypeStage(BaseStage):
                         session, record, yaml_key, ref_field, ref_endpoint,
                         resolved[ref_field], template_ids,
                     )
+                if endpoint == "front_port_templates":
+                    self._attach_rear_port_mappings(session, record, resolved, port_mappings, template_ids)
                 to_create.append(resolved)
 
             if to_create:
@@ -184,6 +232,44 @@ class DeviceTypeStage(BaseStage):
             if any(p["name"] not in existing for p in payloads):
                 return True
         return False
+
+    def _attach_rear_port_mappings(self, session: Session, record: Record, payload: dict,
+                                   port_mappings: dict, template_ids: dict) -> None:
+        mappings = port_mappings.get(payload["name"])
+        if not mappings:
+            return
+        resolved = [
+            {
+                "position": m["position"],
+                "rear_port": self._resolve_ref(
+                    session, record, "port-mappings", "rear_port", "rear_port_templates",
+                    m["rear_port"], template_ids,
+                ),
+                "rear_port_position": m["rear_port_position"],
+            }
+            for m in mappings
+        ]
+        if self._netbox_supports_port_mappings():
+            payload["rear_ports"] = resolved
+        else:
+            if len(resolved) > 1:
+                raise ValueError(
+                    f"Front port '{payload['name']}' has {len(resolved)} rear-port mappings, "
+                    f"but NetBox {self._netbox_version} supports only one per front port (4.5+ required)"
+                )
+            payload.pop("positions", None)  # front port templates gained 'positions' in 4.5
+            payload["rear_port"] = resolved[0]["rear_port"]
+            payload["rear_port_position"] = resolved[0]["rear_port_position"]
+
+    def _netbox_supports_port_mappings(self) -> bool:
+        if self._supports_port_mappings is None:
+            self._netbox_version = self.client.test_connection()
+            match = re.match(r"(\d+)\.(\d+)", self._netbox_version or "")
+            # Unparseable versions are assumed current (4.5+)
+            self._supports_port_mappings = (
+                (int(match.group(1)), int(match.group(2))) >= (4, 5) if match else True
+            )
+        return self._supports_port_mappings
 
     def _ensure_manufacturer(self, session: Session, record: Record, name: str):
         manufacturer = self.client.nb.dcim.manufacturers.get(name=name)
