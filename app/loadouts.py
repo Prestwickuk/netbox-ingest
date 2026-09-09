@@ -4,7 +4,9 @@ A loadout maps a device type's module bays to module types. It is stored and
 exported by manufacturer/model/bay NAMES so it stays portable across NetBox
 instances; the modules stage resolves the names at apply time.
 """
+import re
 from typing import Any
+from urllib.parse import quote
 
 import yaml
 
@@ -66,7 +68,25 @@ def loadouts_from_yaml(text: str) -> list[dict[str, Any]]:
             "device_type": str(entry["device_type"]),
             "bays": parsed_bays,
         })
+
+    seen: set[str] = set()
+    for loadout in loadouts:
+        if loadout["name"] in seen:
+            raise ValueError(f"Duplicate loadout name '{loadout['name']}' in the file")
+        seen.add(loadout["name"])
     return loadouts
+
+
+def yaml_content_disposition(name: str) -> str:
+    """Content-Disposition for a loadout's YAML download.
+
+    Non-ASCII loadout names cannot go into the plain filename parameter
+    (Starlette encodes headers as latin-1 and raises), so send an ASCII
+    fallback plus the RFC 5987 filename* form carrying the real name.
+    """
+    base = f"{name.lower().replace(' ', '-')}.yaml"
+    ascii_name = re.sub(r'[^A-Za-z0-9._-]', '-', base.encode("ascii", "replace").decode())
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(base)}"
 
 
 def expand_loadout_rows(bays: dict, devices: list[dict], status: str = "active") -> list[dict[str, Any]]:

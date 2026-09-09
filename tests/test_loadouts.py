@@ -1,7 +1,13 @@
 import unittest
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
-from app.loadouts import expand_loadout_rows, loadout_to_yaml, loadouts_from_yaml
+from app.loadouts import (
+    expand_loadout_rows,
+    loadout_to_yaml,
+    loadouts_from_yaml,
+    yaml_content_disposition,
+)
 
 BAYS = {
     "DPU1": {"manufacturer": "Nvidia", "module_type": "BlueField-3 DPU B3220"},
@@ -65,6 +71,56 @@ bays:
     def test_import_rejects_invalid_yaml(self) -> None:
         with self.assertRaises(ValueError):
             loadouts_from_yaml("name: [unclosed")
+
+
+class ImportDuplicateNameTests(unittest.TestCase):
+    def test_duplicate_names_within_one_file_rejected(self) -> None:
+        """Two same-named loadouts in one upload must fail validation, not
+        reach the DB unique constraint at commit (autoflush=False hides the
+        first pending row from a per-entry lookup)."""
+        doc = loadout_to_yaml(SimpleNamespace(
+            name="same", manufacturer="M", device_type="T", bays=BAYS))
+        with self.assertRaises(ValueError) as ctx:
+            loadouts_from_yaml(doc + "---\n" + doc)
+        self.assertIn("Duplicate loadout name 'same'", str(ctx.exception))
+
+
+class ContentDispositionTests(unittest.TestCase):
+    def test_ascii_name_passes_through(self) -> None:
+        header = yaml_content_disposition("A126GS standard")
+        self.assertIn('filename="a126gs-standard.yaml"', header)
+        self.assertIn("filename*=UTF-8''a126gs-standard.yaml", header)
+
+    def test_non_ascii_name_gets_ascii_fallback_and_rfc5987_form(self) -> None:
+        header = yaml_content_disposition("pełny")
+        header.encode("latin-1")  # Starlette encodes headers as latin-1; must not raise
+        self.assertIn('filename="pe-ny.yaml"', header)
+        self.assertIn("filename*=UTF-8''pe%C5%82ny.yaml", header)
+
+    def test_quotes_and_backslashes_removed_from_fallback(self) -> None:
+        header = yaml_content_disposition('a"b\\c')
+        self.assertIn('filename="a-b-c.yaml"', header)
+
+
+class PartialEscapingTests(unittest.TestCase):
+    def test_unknown_device_type_response_escapes_query_input(self) -> None:
+        """device_type_value is attacker-controlled query input reflected into
+        the partial; script payloads must come back HTML-escaped."""
+        from app.api.loadouts import SEP, bays_partial
+
+        client = MagicMock()
+        client.nb.dcim.manufacturers.get.return_value = MagicMock(id=1)
+        client.nb.dcim.device_types.get.return_value = None
+        with patch("app.api.loadouts._instance_client", return_value=(MagicMock(), client)):
+            response = bays_partial(
+                request=MagicMock(),
+                instance_id="x",
+                device_type_value=f"M{SEP}<script>alert(1)</script>",
+                db=MagicMock(),
+            )
+        body = response.body.decode()
+        self.assertNotIn("<script>", body)
+        self.assertIn("&lt;script&gt;", body)
 
 
 class ExpandLoadoutRowsTests(unittest.TestCase):

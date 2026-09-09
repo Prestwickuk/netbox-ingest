@@ -42,13 +42,17 @@
           <button type="button" class="text-indigo-600 hover:underline"
             onclick="document.getElementById('apply-{{ l.id }}').classList.toggle('hidden')">Apply</button>
           <a href="/loadouts/{{ l.id }}/export" class="text-gray-500 hover:underline">Export YAML</a>
-          <form action="/loadouts/{{ l.id }}/duplicate" method="post" class="inline"
-            onsubmit="this.new_name.value = prompt('Name for the copy:', '{{ l.name }} (copy)') || ''; return !!this.new_name.value;">
+          {# Loadout names must never appear inside the JavaScript source of
+             these handlers — HTML attribute escaping does not protect a JS
+             string context. The handlers read this.dataset.name instead,
+             which the browser decodes safely from the escaped attribute. #}
+          <form action="/loadouts/{{ l.id }}/duplicate" method="post" class="inline" data-name="{{ l.name }}"
+            onsubmit="this.new_name.value = prompt('Name for the copy:', this.dataset.name + ' (copy)') || ''; return !!this.new_name.value;">
             <input type="hidden" name="new_name" value="">
             <button type="submit" class="text-gray-500 hover:underline">Duplicate</button>
           </form>
-          <form action="/loadouts/{{ l.id }}/delete" method="post" class="inline"
-            onsubmit="return confirm('Delete loadout {{ l.name }}?');">
+          <form action="/loadouts/{{ l.id }}/delete" method="post" class="inline" data-name="{{ l.name }}"
+            onsubmit="return confirm('Delete loadout ' + this.dataset.name + '?');">
             <button type="submit" class="text-red-500 hover:underline">Delete</button>
           </form>
         </div>

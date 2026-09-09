@@ -4,11 +4,17 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from markupsafe import escape
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.loadouts import expand_loadout_rows, loadout_to_yaml, loadouts_from_yaml
+from app.loadouts import (
+    expand_loadout_rows,
+    loadout_to_yaml,
+    loadouts_from_yaml,
+    yaml_content_disposition,
+)
 from app.models.db import Job, Loadout, NetBoxInstance, Record
 from app.netbox.client import NetBoxClient
 from app.templates_config import templates
@@ -70,7 +76,7 @@ def device_types_partial(request: Request, instance_id: str = "", db: Session = 
         )
     except Exception as exc:
         log.warning(f"Failed to list device types from {instance.name}: {exc}")
-        return HTMLResponse(f'<p class="text-sm text-red-600">Could not reach NetBox: {exc}</p>')
+        return HTMLResponse(f'<p class="text-sm text-red-600">Could not reach NetBox: {escape(exc)}</p>')
     return templates.TemplateResponse("partials/loadout_device_types.html", {
         "request": request,
         "instance_id": instance_id,
@@ -91,7 +97,7 @@ def bays_partial(request: Request, instance_id: str = "", device_type_value: str
         manufacturer = client.nb.dcim.manufacturers.get(name=manufacturer_name)
         dt = client.nb.dcim.device_types.get(model=model, manufacturer_id=manufacturer.id) if manufacturer else None
         if not dt:
-            return HTMLResponse(f'<p class="text-sm text-red-600">Device type {model!r} not found.</p>')
+            return HTMLResponse(f'<p class="text-sm text-red-600">Device type \'{escape(model)}\' not found.</p>')
         bays = sorted((b.name for b in client.nb.dcim.module_bay_templates.filter(device_type_id=dt.id)))
         module_types = sorted(
             ((mt.manufacturer.name, mt.model) for mt in client.nb.dcim.module_types.all()),
@@ -99,7 +105,7 @@ def bays_partial(request: Request, instance_id: str = "", device_type_value: str
         )
     except Exception as exc:
         log.warning(f"Failed to list bays/module types from {instance.name}: {exc}")
-        return HTMLResponse(f'<p class="text-sm text-red-600">Could not reach NetBox: {exc}</p>')
+        return HTMLResponse(f'<p class="text-sm text-red-600">Could not reach NetBox: {escape(exc)}</p>')
     return templates.TemplateResponse("partials/loadout_bays.html", {
         "request": request,
         "manufacturer": manufacturer_name,
@@ -165,11 +171,10 @@ def export_loadout(loadout_id: uuid.UUID, db: Session = Depends(get_db)):
     loadout = db.get(Loadout, loadout_id)
     if not loadout:
         return Response(status_code=404)
-    filename = loadout.name.lower().replace(" ", "-")
     return Response(
         content=loadout_to_yaml(loadout),
         media_type="application/x-yaml",
-        headers={"Content-Disposition": f'attachment; filename="{filename}.yaml"'},
+        headers={"Content-Disposition": yaml_content_disposition(loadout.name)},
     )
 
 
@@ -215,7 +220,7 @@ def devices_partial(request: Request, loadout_id: uuid.UUID, instance_id: str = 
         ) if dt else []
     except Exception as exc:
         log.warning(f"Failed to list devices from {instance.name}: {exc}")
-        return HTMLResponse(f'<p class="text-sm text-red-600">Could not reach NetBox: {exc}</p>')
+        return HTMLResponse(f'<p class="text-sm text-red-600">Could not reach NetBox: {escape(exc)}</p>')
     return templates.TemplateResponse("partials/loadout_devices.html", {
         "request": request,
         "loadout": loadout,
