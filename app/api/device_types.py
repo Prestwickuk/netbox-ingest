@@ -11,7 +11,12 @@ from app import devicetype_library
 from app.database import get_db
 from app.models.db import Job, NetBoxInstance, Record
 from app.templates_config import templates
-from app.worker.stages.device_types import parse_device_type_yaml
+from app.worker.stages.device_types import (
+    KIND_DEVICE_TYPE,
+    KIND_MODULE_TYPE,
+    detect_definition_kind,
+    parse_device_type_yaml,
+)
 
 log = logging.getLogger(__name__)
 
@@ -30,19 +35,30 @@ def device_types_page(request: Request, db: Session = Depends(get_db)):
     })
 
 
+def _validated_section(section: str) -> str:
+    return section if section in devicetype_library.SECTIONS else "device-types"
+
+
+def _section_noun(section: str) -> str:
+    return "module type" if section == "module-types" else "device type"
+
+
 @router.get("/device-types/manufacturers", response_class=HTMLResponse)
-def manufacturers_partial(request: Request):
+def manufacturers_partial(request: Request, section: str = "device-types"):
     """HTMX partial: manufacturer dropdown built from the devicetype-library index."""
+    section = _validated_section(section)
     try:
-        index = devicetype_library.get_index()
+        index = devicetype_library.get_index(section)
     except Exception as exc:
         log.warning(f"Failed to load devicetype-library index: {exc}")
         return templates.TemplateResponse("partials/dtl_manufacturers.html", {
             "request": request,
+            "section": section,
             "error": f"Could not reach the device-type library on GitHub: {exc}",
         })
     return templates.TemplateResponse("partials/dtl_manufacturers.html", {
         "request": request,
+        "section": section,
         "manufacturers": [
             {"name": name, "count": len(models)} for name, models in index.items()
         ],
@@ -50,21 +66,24 @@ def manufacturers_partial(request: Request):
 
 
 @router.get("/device-types/models", response_class=HTMLResponse)
-def models_partial(request: Request, manufacturer: str = ""):
-    """HTMX partial: device-type model checkboxes for one manufacturer."""
+def models_partial(request: Request, manufacturer: str = "", section: str = "device-types"):
+    """HTMX partial: model checkboxes for one manufacturer in one library section."""
+    section = _validated_section(section)
     if not manufacturer:
         return HTMLResponse("")
     try:
-        index = devicetype_library.get_index()
+        index = devicetype_library.get_index(section)
     except Exception as exc:
         return templates.TemplateResponse("partials/dtl_models.html", {
             "request": request,
             "manufacturer": manufacturer,
+            "noun": _section_noun(section),
             "error": f"Could not reach the device-type library on GitHub: {exc}",
         })
     return templates.TemplateResponse("partials/dtl_models.html", {
         "request": request,
         "manufacturer": manufacturer,
+        "noun": _section_noun(section),
         "models": index.get(manufacturer, []),
     })
 
@@ -78,6 +97,7 @@ def import_device_types(
     netbox_token: Annotated[str, Form()] = "",
     model_paths: Annotated[list[str], Form()] = [],
     yaml_files: Annotated[list[UploadFile], File()] = [],
+    yaml_kind: Annotated[str, Form()] = "auto",
     db: Session = Depends(get_db),
 ):
     def error_page(message: str):
@@ -107,7 +127,7 @@ def import_device_types(
 
     for path in model_paths:
         try:
-            devicetype_library.validate_library_path(path)
+            kind = devicetype_library.path_kind(path)
             yaml_text = devicetype_library.fetch_device_type_yaml(path)
             data = parse_device_type_yaml(yaml_text)
         except Exception as exc:
@@ -116,9 +136,14 @@ def import_device_types(
             "name": f"{data['manufacturer']} {data['model']}",
             "source": "library",
             "path": path,
+            "kind": kind,
             "yaml_text": yaml_text,
         })
 
+    forced_kind = {
+        "device": KIND_DEVICE_TYPE,
+        "module": KIND_MODULE_TYPE,
+    }.get(yaml_kind)
     for f in yaml_files:
         if not f.filename:
             continue
@@ -131,15 +156,21 @@ def import_device_types(
             "name": f"{data['manufacturer']} {data['model']}",
             "source": "upload",
             "path": f.filename,
+            "kind": forced_kind or detect_definition_kind(data),
             "yaml_text": yaml_text,
         })
 
     if not rows:
-        return error_page("Select at least one device type from the library or upload a YAML file")
+        return error_page("Select at least one device or module type from the library or upload a YAML file")
 
+    kinds = {row["kind"] for row in rows}
+    default_name = (
+        f"Module type import ({len(rows)})" if kinds == {KIND_MODULE_TYPE}
+        else f"Device type import ({len(rows)})"
+    )
     job = Job(
         id=uuid.uuid4(),
-        name=job_name.strip() or f"Device type import ({len(rows)})",
+        name=job_name.strip() or default_name,
         file_type="device_types",
         status="pending",
         total_records=len(rows),

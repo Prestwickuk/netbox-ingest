@@ -3,7 +3,7 @@
   {{ error }}
 </div>
 {% elif not models %}
-<p class="text-sm text-gray-400">No device types found for {{ manufacturer }}.</p>
+<p class="text-sm text-gray-400">No {{ noun | default('device type') }}s found for {{ manufacturer }}.</p>
 {% else %}
 <div class="space-y-2">
   <div class="flex items-center gap-3">
@@ -23,6 +23,6 @@
     </label>
     {% endfor %}
   </div>
-  <p class="text-xs text-gray-400">{{ models|length }} device type(s) for {{ manufacturer }}</p>
+  <p class="text-xs text-gray-400">{{ models|length }} {{ noun | default('device type') }}(s) for {{ manufacturer }}</p>
 </div>
 {% endif %}

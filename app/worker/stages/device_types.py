@@ -25,6 +25,61 @@ DEVICE_TYPE_FIELDS = [
     "comments",
 ]
 
+# Module-type fields — NetBox module types carry no slug, u_height or
+# full-depth flag; they are identified by manufacturer + model alone.
+# The YAML's profile name and attribute_data are handled separately: the
+# profile is resolved by name at create time, and the profile attributes go
+# through the API field 'attributes' — the REST serializer does not expose
+# the YAML/ORM name 'attribute_data' at all, and unknown fields are
+# silently dropped rather than rejected.
+MODULE_TYPE_FIELDS = [
+    "model",
+    "part_number",
+    "airflow",
+    "weight",
+    "weight_unit",
+    "description",
+    "comments",
+]
+
+KIND_DEVICE_TYPE = "device_type"
+KIND_MODULE_TYPE = "module_type"
+
+# YAML keys that only ever appear on device-type definitions (the library's
+# module-type schema has none of these); used to autodetect uploaded files.
+DEVICE_ONLY_KEYS = (
+    "slug", "u_height", "is_full_depth", "subdevice_role",
+    "front_image", "rear_image", "device-bays", "inventory-items",
+)
+
+# Component templates NetBox supports on module types (device bays and
+# inventory items exist only on device types).
+MODULE_COMPONENT_KEYS = {
+    "console-ports", "console-server-ports", "power-ports", "power-outlets",
+    "interfaces", "front-ports", "rear-ports", "module-bays",
+}
+
+# Per-kind wiring: which NetBox endpoint owns the type object, the FK field
+# and filter param its templates use, and how result URLs are built.
+OWNERS = {
+    KIND_DEVICE_TYPE: {
+        "endpoint": "device_types",
+        "fk": "device_type",
+        "filter": "device_type_id",
+        "url_path": "device-types",
+        "fields": DEVICE_TYPE_FIELDS,
+        "label": "device type",
+    },
+    KIND_MODULE_TYPE: {
+        "endpoint": "module_types",
+        "fk": "module_type",
+        "filter": "module_type_id",
+        "url_path": "module-types",
+        "fields": MODULE_TYPE_FIELDS,
+        "label": "module type",
+    },
+}
+
 # Component template specs, in creation order. Power ports must precede power
 # outlets and rear ports must precede front ports, because outlets/front ports
 # reference them by name.
@@ -57,21 +112,46 @@ def parse_device_type_yaml(yaml_text: str) -> dict:
     return data
 
 
-def build_device_type_payload(data: dict, manufacturer_id: int) -> dict:
+def detect_definition_kind(data: dict) -> str:
+    """Classify a parsed library YAML as a device type or a module type.
+
+    Library device-type definitions always carry a slug (their schema requires
+    it) and usually u_height; module-type definitions carry none of the
+    device-only keys.
+    """
+    if any(data.get(key) is not None for key in DEVICE_ONLY_KEYS):
+        return KIND_DEVICE_TYPE
+    return KIND_MODULE_TYPE
+
+
+def build_type_payload(data: dict, manufacturer_id: int, kind: str = KIND_DEVICE_TYPE) -> dict:
     payload: dict = {"manufacturer": manufacturer_id}
-    for field in DEVICE_TYPE_FIELDS:
+    for field in OWNERS[kind]["fields"]:
         if data.get(field) is not None:
             payload[field] = data[field]
-    if not payload.get("slug"):
+    if kind == KIND_DEVICE_TYPE and not payload.get("slug"):
         payload["slug"] = slugify(f"{data['manufacturer']} {data['model']}")
     return payload
 
 
-def build_component_payloads(data: dict) -> list[tuple[str, str, list[dict], dict]]:
+def build_device_type_payload(data: dict, manufacturer_id: int) -> dict:
+    return build_type_payload(data, manufacturer_id, KIND_DEVICE_TYPE)
+
+
+def build_component_payloads(data: dict, kind: str = KIND_DEVICE_TYPE) -> list[tuple[str, str, list[dict], dict]]:
     """Build per-endpoint payload lists from the YAML, leaving name refs unresolved.
 
     Returns [(yaml_key, endpoint, payloads, ref_fields)] in creation order.
     """
+    if kind == KIND_MODULE_TYPE:
+        unsupported = sorted(
+            yaml_key for yaml_key, _, _, _ in COMPONENT_SPECS
+            if data.get(yaml_key) and yaml_key not in MODULE_COMPONENT_KEYS
+        )
+        if unsupported:
+            raise ValueError(
+                f"Module types do not support these component sections: {', '.join(unsupported)}"
+            )
     result = []
     for yaml_key, endpoint, fields, ref_fields in COMPONENT_SPECS:
         items = data.get(yaml_key) or []
@@ -138,52 +218,77 @@ class DeviceTypeStage(BaseStage):
     _supports_port_mappings: bool | None = None
     _netbox_version: str = "unknown"
 
+    @staticmethod
+    def _record_kind(record: Record, data: dict) -> str:
+        """The record's declared kind, set at import time.
+
+        Records queued before module-type support carry no kind and were
+        always device types — including custom YAML without slug/u_height —
+        so a missing kind means device type. Never autodetect here: retrying
+        an old record must resume the existing device type, not create a
+        module type. New imports always persist their kind.
+        """
+        kind = (record.raw_data or {}).get("kind")
+        return kind if kind in OWNERS else KIND_DEVICE_TYPE
+
     def process(self, session: Session, record: Record) -> None:
         existing = None
         complete = False
+        kind = KIND_DEVICE_TYPE
         try:
             data = parse_device_type_yaml(record.raw_data.get("yaml_text", ""))
-            existing = self._find_existing(data)
-            complete = existing is not None and not self._missing_components(existing, data)
+            kind = self._record_kind(record, data)
+            existing = self._find_existing(data, kind)
+            complete = existing is not None and not self._missing_components(existing, data, kind)
         except Exception:
             # Fall through to super().process(): create() hits the same error
             # inside the per-record handler, so the record fails instead of the job.
             pass
 
         if complete:
-            url = f"{self.client.netbox_url}/dcim/device-types/{existing.id}/"
+            url = f"{self.client.netbox_url}/dcim/{OWNERS[kind]['url_path']}/{existing.id}/"
             self.skip(session, record, existing.id, url)
             return
         super().process(session, record)
 
     def create(self, session: Session, record: Record) -> tuple[int, str]:
         data = parse_device_type_yaml(record.raw_data["yaml_text"])
+        kind = self._record_kind(record, data)
+        owner = OWNERS[kind]
 
         manufacturer = self._ensure_manufacturer(session, record, data["manufacturer"])
 
-        device_type = self._find_existing(data, manufacturer_id=manufacturer.id)
-        if device_type:
-            self.log_info(session, record, f"Device type already exists (id={device_type.id}), creating missing templates only")
+        owner_api = getattr(self.client.nb.dcim, owner["endpoint"])
+        profile_id = self._resolve_module_profile(session, record, data) if kind == KIND_MODULE_TYPE else None
+        type_obj = self._find_existing(data, kind, manufacturer_id=manufacturer.id)
+        if type_obj:
+            self.log_info(session, record, f"{owner['label'].capitalize()} already exists (id={type_obj.id}), creating missing templates only")
+            if kind == KIND_MODULE_TYPE:
+                self._apply_module_profile(session, record, type_obj, data, profile_id)
         else:
-            payload = build_device_type_payload(data, manufacturer.id)
-            device_type = self.client.nb.dcim.device_types.create(**payload)
-            self.log_info(session, record, f"Created device type '{data['model']}' (id={device_type.id})")
+            payload = build_type_payload(data, manufacturer.id, kind)
+            if profile_id is not None:
+                payload["profile"] = profile_id
+            if kind == KIND_MODULE_TYPE and data.get("attribute_data"):
+                payload["attributes"] = data["attribute_data"]
+            type_obj = owner_api.create(**payload)
+            self.log_info(session, record, f"Created {owner['label']} '{data['model']}' (id={type_obj.id})")
 
         # Track created/existing template ids so name refs (port mappings,
         # outlet->power port) resolve without extra lookups.
         template_ids: dict[str, dict[str, int]] = {}
         port_mappings = build_port_mappings(data)
 
-        for yaml_key, endpoint, payloads, ref_fields in build_component_payloads(data):
+        for yaml_key, endpoint, payloads, ref_fields in build_component_payloads(data, kind):
             api = getattr(self.client.nb.dcim, endpoint)
-            existing_objs = {t.name: t for t in api.filter(device_type_id=device_type.id)}
+            existing_objs = {t.name: t for t in api.filter(**{owner["filter"]: type_obj.id})}
             template_ids[endpoint] = {name: t.id for name, t in existing_objs.items()}
 
             to_create = []
             for payload in payloads:
                 if payload["name"] in existing_objs:
                     continue
-                resolved = dict(payload, device_type=device_type.id)
+                resolved = dict(payload, **{owner["fk"]: type_obj.id})
                 for ref_field, ref_endpoint in ref_fields.items():
                     if ref_field not in resolved:
                         continue
@@ -207,34 +312,97 @@ class DeviceTypeStage(BaseStage):
                 self._repair_missing_mappings(
                     session, record, payloads, existing_objs, port_mappings, template_ids)
 
-        return device_type.id, f"{self.client.netbox_url}/dcim/device-types/{device_type.id}/"
+        return type_obj.id, f"{self.client.netbox_url}/dcim/{owner['url_path']}/{type_obj.id}/"
 
-    def _find_existing(self, data: dict, manufacturer_id: int | None = None):
-        """Look up the device type scoped to its manufacturer.
+    def _find_existing(self, data: dict, kind: str = KIND_DEVICE_TYPE, manufacturer_id: int | None = None):
+        """Look up the device/module type scoped to its manufacturer.
 
         NetBox slugs and models are only unique per manufacturer, so an
-        unscoped slug lookup could match (and later mutate) another
-        manufacturer's device type.
+        unscoped lookup could match (and later mutate) another manufacturer's
+        type. Module types have no slug, so they match on model alone.
         """
         if manufacturer_id is None:
             manufacturer = self.client.nb.dcim.manufacturers.get(name=data["manufacturer"])
             if not manufacturer:
                 return None
             manufacturer_id = manufacturer.id
+        owner_api = getattr(self.client.nb.dcim, OWNERS[kind]["endpoint"])
+        if kind == KIND_MODULE_TYPE:
+            return owner_api.get(model=data["model"], manufacturer_id=manufacturer_id)
         slug = data.get("slug") or slugify(f"{data['manufacturer']} {data['model']}")
         return (
-            self.client.nb.dcim.device_types.get(slug=slug, manufacturer_id=manufacturer_id)
-            or self.client.nb.dcim.device_types.get(model=data["model"], manufacturer_id=manufacturer_id)
+            owner_api.get(slug=slug, manufacturer_id=manufacturer_id)
+            or owner_api.get(model=data["model"], manufacturer_id=manufacturer_id)
         )
 
-    def _missing_components(self, device_type, data: dict) -> bool:
-        """True if any template named in the YAML does not exist on the device type
-        yet, or an existing front port lacks the rear-port mappings the YAML
-        defines (left empty by imports made before port-mapping support)."""
+    def _resolve_module_profile(self, session: Session, record: Record, data: dict):
+        """Resolve the YAML's module-type profile name to a NetBox profile id.
+
+        A profile name NetBox does not know is logged and skipped rather than
+        failing the record — the module type still imports without it.
+        """
+        name = data.get("profile")
+        if not name:
+            return None
+        profile = self.client.nb.dcim.module_type_profiles.get(name=name)
+        if not profile:
+            self.log_info(session, record,
+                          f"Module type profile '{name}' not found in NetBox; importing without a profile")
+            return None
+        return profile.id
+
+    @staticmethod
+    def _existing_attributes(type_obj) -> dict:
+        """The module type's stored profile attributes as a plain dict.
+
+        NetBox's REST serializer names the field 'attributes' (the YAML and
+        ORM call it attribute_data — the API drops that name entirely);
+        pynetbox may hand back a Record rather than a dict."""
+        existing = getattr(type_obj, "attributes", None) or getattr(type_obj, "attribute_data", None) or {}
+        return existing if isinstance(existing, dict) else dict(existing)
+
+    def _apply_module_profile(self, session: Session, record: Record, type_obj,
+                              data: dict, profile_id) -> None:
+        """Backfill a missing profile and missing attribute keys on an
+        existing module type (imports made before profile support left both
+        unset). Values already present are never overwritten. Writes go to
+        the API's 'attributes' field — 'attribute_data' is read-only."""
+        changed = []
+        if profile_id is not None and not getattr(type_obj, "profile", None):
+            type_obj.profile = profile_id
+            changed.append("profile")
+        wanted = data.get("attribute_data") or {}
+        existing = self._existing_attributes(type_obj)
+        missing = {k: v for k, v in wanted.items() if k not in existing}
+        if missing:
+            type_obj.attributes = {**existing, **missing}
+            changed.append("attributes")
+        if changed:
+            type_obj.save()
+            self.log_info(session, record,
+                          f"Updated existing module type with missing {' and '.join(changed)}")
+
+    def _module_profile_missing(self, type_obj, data: dict) -> bool:
+        """True when the YAML defines a profile or attributes the existing
+        module type lacks (and, for the profile, NetBox can actually resolve)."""
+        wanted = data.get("attribute_data") or {}
+        if any(k not in self._existing_attributes(type_obj) for k in wanted):
+            return True
+        if data.get("profile") and not getattr(type_obj, "profile", None):
+            return self.client.nb.dcim.module_type_profiles.get(name=data["profile"]) is not None
+        return False
+
+    def _missing_components(self, type_obj, data: dict, kind: str = KIND_DEVICE_TYPE) -> bool:
+        """True if any template named in the YAML does not exist on the device or
+        module type yet, an existing front port lacks the rear-port mappings the
+        YAML defines (left empty by imports made before port-mapping support), or
+        an existing module type lacks the YAML's profile or attribute_data."""
+        if kind == KIND_MODULE_TYPE and self._module_profile_missing(type_obj, data):
+            return True
         port_mappings = build_port_mappings(data)
-        for _, endpoint, payloads, _ in build_component_payloads(data):
+        for _, endpoint, payloads, _ in build_component_payloads(data, kind):
             api = getattr(self.client.nb.dcim, endpoint)
-            existing = {t.name: t for t in api.filter(device_type_id=device_type.id)}
+            existing = {t.name: t for t in api.filter(**{OWNERS[kind]["filter"]: type_obj.id})}
             if any(p["name"] not in existing for p in payloads):
                 return True
             if endpoint == "front_port_templates" and port_mappings and self._netbox_supports_port_mappings():

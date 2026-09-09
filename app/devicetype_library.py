@@ -1,8 +1,9 @@
 """Client for the netbox-community devicetype-library GitHub repository.
 
-Builds a browsable index (manufacturer -> device type models) from a single
-recursive git-tree API call, cached in memory, and fetches individual
-device-type YAML definitions from raw.githubusercontent.com.
+Builds a browsable index (section -> manufacturer -> models) covering the
+device-types/ and module-types/ trees from a single recursive git-tree API
+call, cached in memory, and fetches individual YAML definitions from
+raw.githubusercontent.com.
 """
 import logging
 import os
@@ -22,7 +23,14 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 TREE_URL = "https://api.github.com/repos/{repo}/git/trees/{branch}?recursive=1"
 RAW_URL = "https://raw.githubusercontent.com/{repo}/{branch}/{path}"
 
-_PATH_RE = re.compile(r"^device-types/(?!\.)[^/]+/(?!\.)[^/]+\.ya?ml$")
+# The two library sections HAROLD can import from, and the record kind each
+# section's definitions become in the device_types worker stage.
+SECTIONS = {
+    "device-types": "device_type",
+    "module-types": "module_type",
+}
+
+_PATH_RE = re.compile(r"^(device-types|module-types)/(?!\.)[^/]+/(?!\.)[^/]+\.ya?ml$")
 
 _cache_lock = threading.Lock()
 _cache: dict = {"fetched_at": 0.0, "index": None}
@@ -49,48 +57,57 @@ def model_display_name(path: str) -> str:
     return re.sub(r"\.ya?ml$", "", filename)
 
 
-def build_index(tree_entries: list[dict]) -> dict[str, list[dict]]:
-    """Group device-type YAML paths from a git tree into {manufacturer: [models]}."""
-    index: dict[str, list[dict]] = {}
+def build_index(tree_entries: list[dict]) -> dict[str, dict[str, list[dict]]]:
+    """Group library YAML paths from a git tree into {section: {manufacturer: [models]}}."""
+    index: dict[str, dict[str, list[dict]]] = {section: {} for section in SECTIONS}
     for entry in tree_entries:
         path = entry.get("path", "")
         if entry.get("type") != "blob" or not _PATH_RE.match(path):
             continue
-        manufacturer = path.split("/")[1]
-        index.setdefault(manufacturer, []).append({
+        section, manufacturer = path.split("/")[:2]
+        index[section].setdefault(manufacturer, []).append({
             "model": model_display_name(path),
             "path": path,
         })
-    for models in index.values():
-        models.sort(key=lambda m: m["model"].lower())
-    return dict(sorted(index.items(), key=lambda kv: kv[0].lower()))
+    for by_manufacturer in index.values():
+        for models in by_manufacturer.values():
+            models.sort(key=lambda m: m["model"].lower())
+    return {
+        section: dict(sorted(by_manufacturer.items(), key=lambda kv: kv[0].lower()))
+        for section, by_manufacturer in index.items()
+    }
 
 
-def get_index(force_refresh: bool = False) -> dict[str, list[dict]]:
-    """Return the cached library index, refreshing from GitHub when stale."""
+def get_index(section: str = "device-types", force_refresh: bool = False) -> dict[str, list[dict]]:
+    """Return one section of the cached library index, refreshing from GitHub when stale."""
+    if section not in SECTIONS:
+        raise ValueError(f"Unknown devicetype-library section: {section!r}")
     with _cache_lock:
         age = time.time() - _cache["fetched_at"]
-        if _cache["index"] is not None and age < DTL_CACHE_TTL and not force_refresh:
-            return _cache["index"]
+        if _cache["index"] is None or age >= DTL_CACHE_TTL or force_refresh:
+            url = TREE_URL.format(repo=DTL_REPO, branch=DTL_BRANCH)
+            log.info(f"Refreshing devicetype-library index from {url}")
+            resp = _session().get(url, timeout=30)
+            resp.raise_for_status()
+            payload = resp.json()
+            if payload.get("truncated"):
+                log.warning("devicetype-library git tree response was truncated; index may be incomplete")
 
-        url = TREE_URL.format(repo=DTL_REPO, branch=DTL_BRANCH)
-        log.info(f"Refreshing devicetype-library index from {url}")
-        resp = _session().get(url, timeout=30)
-        resp.raise_for_status()
-        payload = resp.json()
-        if payload.get("truncated"):
-            log.warning("devicetype-library git tree response was truncated; index may be incomplete")
-
-        _cache["index"] = build_index(payload.get("tree", []))
-        _cache["fetched_at"] = time.time()
-        return _cache["index"]
+            _cache["index"] = build_index(payload.get("tree", []))
+            _cache["fetched_at"] = time.time()
+        return _cache["index"][section]
 
 
 def validate_library_path(path: str) -> str:
-    """Reject anything that is not a device-type YAML path inside the library."""
+    """Reject anything that is not a device-type or module-type YAML path inside the library."""
     if not _PATH_RE.match(path):
         raise ValueError(f"Invalid device-type library path: {path!r}")
     return path
+
+
+def path_kind(path: str) -> str:
+    """Map a validated library path to the worker record kind it imports as."""
+    return SECTIONS[validate_library_path(path).split("/", 1)[0]]
 
 
 def fetch_device_type_yaml(path: str) -> str:

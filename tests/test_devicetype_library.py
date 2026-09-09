@@ -3,6 +3,7 @@ import unittest
 from app.devicetype_library import (
     build_index,
     model_display_name,
+    path_kind,
     slugify,
     validate_library_path,
 )
@@ -36,11 +37,13 @@ class BuildIndexTests(unittest.TestCase):
         {"path": "device-types/Dell/notes.txt", "type": "blob"},
     ]
 
-    def test_only_device_type_yaml_blobs_are_indexed(self) -> None:
+    def test_only_library_yaml_blobs_are_indexed_per_section(self) -> None:
         index = build_index(self.TREE)
-        self.assertEqual(list(index.keys()), ["APC", "Dell"])
-        self.assertEqual([m["model"] for m in index["Dell"]], ["Aaa-First", "PowerEdge-R6615"])
-        self.assertEqual(index["APC"][0]["path"], "device-types/APC/AP8941.yml")
+        self.assertEqual(list(index["device-types"].keys()), ["APC", "Dell"])
+        self.assertEqual([m["model"] for m in index["device-types"]["Dell"]], ["Aaa-First", "PowerEdge-R6615"])
+        self.assertEqual(index["device-types"]["APC"][0]["path"], "device-types/APC/AP8941.yml")
+        self.assertEqual(list(index["module-types"].keys()), ["Cisco"])
+        self.assertEqual(index["module-types"]["Cisco"][0]["path"], "module-types/Cisco/Some-Module.yaml")
 
 
 class ValidateLibraryPathTests(unittest.TestCase):
@@ -50,16 +53,33 @@ class ValidateLibraryPathTests(unittest.TestCase):
             "device-types/Dell/PowerEdge-R6615.yaml",
         )
 
+    def test_accepts_module_type_paths(self) -> None:
+        self.assertEqual(
+            validate_library_path("module-types/Cisco/Some-Module.yaml"),
+            "module-types/Cisco/Some-Module.yaml",
+        )
+
     def test_rejects_other_paths(self) -> None:
         for bad in (
-            "module-types/Cisco/Some-Module.yaml",
             "device-types/../secrets.yaml",
+            "module-types/../secrets.yaml",
             "device-types/Dell/nested/file.yaml",
             "device-types/Dell/readme.txt",
+            "elevation-images/Dell/front.png",
             "/etc/passwd",
         ):
             with self.assertRaises(ValueError, msg=bad):
                 validate_library_path(bad)
+
+
+class PathKindTests(unittest.TestCase):
+    def test_maps_sections_to_record_kinds(self) -> None:
+        self.assertEqual(path_kind("device-types/Dell/PowerEdge-R6615.yaml"), "device_type")
+        self.assertEqual(path_kind("module-types/Cisco/Some-Module.yaml"), "module_type")
+
+    def test_rejects_invalid_paths(self) -> None:
+        with self.assertRaises(ValueError):
+            path_kind("elevation-images/Dell/front.png")
 
 
 if __name__ == "__main__":
