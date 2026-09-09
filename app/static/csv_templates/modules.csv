@@ -1,0 +1,5 @@
+device,site,module_bay,module_type,manufacturer,status,serial,asset_tag,description
+gpu-node-01,DC1,DPU1,BlueField-3 DPU B3220,Nvidia,active,MT2345X00001,,
+gpu-node-01,DC1,DPU2,BlueField-3 DPU B3220,Nvidia,active,MT2345X00002,,
+gpu-node-01,DC1,NIC1,ConnectX-7 MCX75310AAS-NEAT,Nvidia,active,,,GPU fabric NIC
+fibre-enc-01,DC1,1,FHD-2MTP12LCDOS2A,FS,active,,,

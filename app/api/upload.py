@@ -24,6 +24,7 @@ VALID_FILE_TYPES = [
     "power_feeds",
     "cables",
     "ip_assignment",
+    "modules",
 ]
 
 

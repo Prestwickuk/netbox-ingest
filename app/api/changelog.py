@@ -16,6 +16,16 @@ def changelog(request: Request):
 
 CHANGELOG = [
     {
+        "version": "1.4.0",
+        "date": "2026-09-09",
+        "sections": {
+            "Added": [
+                "New `modules` ingestion stage: install modules (DPUs, NICs, cassettes, PSUs) into device module bays from a CSV (device, site, module_bay, module_type, plus optional manufacturer, status, serial, asset_tag, description). NetBox instantiates the module type's {module}-templated interfaces and ports on the device automatically.",
+                "The stage is idempotent per bay: a bay that already holds a module is skipped, so re-applying a fleet CSV after fitting new hardware only fills bays that are still empty. Unknown devices, bays, or module types fail the individual record with a clear message.",
+            ],
+        },
+    },
+    {
         "version": "1.3.0",
         "date": "2026-09-08",
         "sections": {

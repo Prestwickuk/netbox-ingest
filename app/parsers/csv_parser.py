@@ -16,6 +16,7 @@ REQUIRED_HEADERS: dict[str, list[str]] = {
         "b_device", "b_site", "b_termination_type", "b_termination_name",
     ],
     "ip_assignment": ["device", "site", "prefix"],
+    "modules": ["device", "site", "module_bay", "module_type"],
 }
 
 

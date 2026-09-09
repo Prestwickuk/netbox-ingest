@@ -20,6 +20,7 @@ from app.worker.stages.power_feeds import PowerFeedStage
 from app.worker.stages.cables import CableStage
 from app.worker.stages.ip_assignment import IPAssignmentStage
 from app.worker.stages.device_types import DeviceTypeStage
+from app.worker.stages.modules import ModuleStage
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ STAGE_MAP = {
     "cables": CableStage,
     "ip_assignment": IPAssignmentStage,
     "device_types": DeviceTypeStage,
+    "modules": ModuleStage,
 }
 
 
