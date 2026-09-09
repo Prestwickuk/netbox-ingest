@@ -16,6 +16,17 @@ def changelog(request: Request):
 
 CHANGELOG = [
     {
+        "version": "1.5.0",
+        "date": "2026-09-09",
+        "sections": {
+            "Added": [
+                "New Loadouts page: build a named module loadout for a device type by picking a saved NetBox instance, a device type, and a module type for each of its bays (bays and module-type choices come live from NetBox). Loadouts are stored by manufacturer/model/bay names, not NetBox ids, so one loadout applies to any instance.",
+                "Apply a loadout to devices: pick an instance, tick the devices of that type, and HAROLD queues a `modules` job expanding the loadout to one record per device x bay — populated bays skip, so applying a full loadout to a partially-fitted fleet only fills the gaps.",
+                "Loadout YAML export/import for version control: download any loadout as YAML, and import one or more loadout documents from a file. Duplicate turns a standard loadout into a variant (e.g. single-DPU) in two clicks.",
+            ],
+        },
+    },
+    {
         "version": "1.4.0",
         "date": "2026-09-09",
         "sections": {

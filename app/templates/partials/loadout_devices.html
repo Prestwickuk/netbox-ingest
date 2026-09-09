@@ -1,0 +1,16 @@
+{% if not device_type_known %}
+<p class="text-sm text-amber-600">Device type {{ loadout.manufacturer }} {{ loadout.device_type }} does not exist on this instance — import it first.</p>
+{% elif not devices %}
+<p class="text-sm text-gray-400">No {{ loadout.device_type }} devices on this instance yet.</p>
+{% else %}
+<div class="max-h-48 overflow-y-auto border border-gray-200 rounded-md divide-y divide-gray-100">
+  {% for name, site in devices %}
+  <label class="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 cursor-pointer">
+    <input type="checkbox" name="target_devices" value="{{ name }}{{ sep }}{{ site }}" class="rounded">
+    <span class="font-mono">{{ name }}</span>
+    <span class="text-gray-400">({{ site }})</span>
+  </label>
+  {% endfor %}
+</div>
+<p class="mt-1 text-xs text-gray-400">{{ devices|length }} device(s) of type {{ loadout.device_type }}</p>
+{% endif %}

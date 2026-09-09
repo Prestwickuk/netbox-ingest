@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from app.database import engine
 from app.models.db import Base
 from app.security.tokens import validate_token_encryption_key
-from app.api import jobs, upload, netbox_instances, changelog, device_types
+from app.api import jobs, upload, netbox_instances, changelog, device_types, loadouts
 
 
 @asynccontextmanager
@@ -23,3 +23,4 @@ app.include_router(upload.router)
 app.include_router(netbox_instances.router)
 app.include_router(changelog.router)
 app.include_router(device_types.router)
+app.include_router(loadouts.router)

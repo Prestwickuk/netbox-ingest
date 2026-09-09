@@ -1,0 +1,10 @@
+<label class="block text-sm font-medium text-gray-700 mb-1">Device type</label>
+<select name="device_type_value"
+  hx-get="/loadouts/bays?instance_id={{ instance_id }}" hx-target="#loadout-bays" hx-swap="innerHTML"
+  hx-trigger="change"
+  class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+  <option value="">— select a device type ({{ device_types|length }} on this instance) —</option>
+  {% for manufacturer, model in device_types %}
+  <option value="{{ manufacturer }}{{ sep }}{{ model }}">{{ manufacturer }} — {{ model }}</option>
+  {% endfor %}
+</select>

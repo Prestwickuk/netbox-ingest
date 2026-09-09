@@ -33,6 +33,24 @@ class NetBoxInstance(Base):
         self._token = encrypt_token(value)
 
 
+class Loadout(Base):
+    """A named module loadout for one device type: which module type sits in
+    which bay. Stored by manufacturer/model/bay names (not NetBox ids) so a
+    loadout is portable across NetBox instances; names are resolved at apply
+    time by the modules stage."""
+
+    __tablename__ = "loadouts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), unique=True)
+    manufacturer: Mapped[str] = mapped_column(String(255))
+    device_type: Mapped[str] = mapped_column(String(255))  # device type model name
+    # {bay_name: {"manufacturer": ..., "module_type": ...}}
+    bays: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class Job(Base):
     __tablename__ = "jobs"
 

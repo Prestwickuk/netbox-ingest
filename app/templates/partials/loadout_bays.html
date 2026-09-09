@@ -1,0 +1,20 @@
+{% if not bays %}
+<p class="text-sm text-amber-600">Device type {{ manufacturer }} {{ model }} has no module bays — nothing to fit a loadout into.</p>
+{% else %}
+<fieldset class="border border-gray-200 rounded-md p-4 space-y-2">
+  <legend class="text-sm font-medium text-gray-700 px-1">Bays of {{ manufacturer }} {{ model }}</legend>
+  {% for bay in bays %}
+  <div class="flex items-center gap-3">
+    <span class="w-24 text-sm font-mono text-gray-600">{{ bay }}</span>
+    <select name="{{ bay_field_prefix }}{{ bay }}"
+      class="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+      <option value="" selected>— leave empty —</option>
+      {% for mt_manufacturer, mt_model in module_types %}
+      <option value="{{ mt_manufacturer }}{{ sep }}{{ mt_model }}">{{ mt_manufacturer }} — {{ mt_model }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endfor %}
+  <p class="text-xs text-gray-400">Bays left empty are not part of the loadout and stay untouched when it is applied.</p>
+</fieldset>
+{% endif %}
