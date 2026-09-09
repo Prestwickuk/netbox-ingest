@@ -27,6 +27,11 @@ DEVICE_TYPE_FIELDS = [
 
 # Module-type fields — NetBox module types carry no slug, u_height or
 # full-depth flag; they are identified by manufacturer + model alone.
+# The YAML's profile name and attribute_data are handled separately: the
+# profile is resolved by name at create time, and the profile attributes go
+# through the API field 'attributes' — the REST serializer does not expose
+# the YAML/ORM name 'attribute_data' at all, and unknown fields are
+# silently dropped rather than rejected.
 MODULE_TYPE_FIELDS = [
     "model",
     "part_number",
@@ -215,9 +220,16 @@ class DeviceTypeStage(BaseStage):
 
     @staticmethod
     def _record_kind(record: Record, data: dict) -> str:
-        """The record's declared kind (set at import time), else autodetected."""
+        """The record's declared kind, set at import time.
+
+        Records queued before module-type support carry no kind and were
+        always device types — including custom YAML without slug/u_height —
+        so a missing kind means device type. Never autodetect here: retrying
+        an old record must resume the existing device type, not create a
+        module type. New imports always persist their kind.
+        """
         kind = (record.raw_data or {}).get("kind")
-        return kind if kind in OWNERS else detect_definition_kind(data)
+        return kind if kind in OWNERS else KIND_DEVICE_TYPE
 
     def process(self, session: Session, record: Record) -> None:
         existing = None
@@ -247,11 +259,18 @@ class DeviceTypeStage(BaseStage):
         manufacturer = self._ensure_manufacturer(session, record, data["manufacturer"])
 
         owner_api = getattr(self.client.nb.dcim, owner["endpoint"])
+        profile_id = self._resolve_module_profile(session, record, data) if kind == KIND_MODULE_TYPE else None
         type_obj = self._find_existing(data, kind, manufacturer_id=manufacturer.id)
         if type_obj:
             self.log_info(session, record, f"{owner['label'].capitalize()} already exists (id={type_obj.id}), creating missing templates only")
+            if kind == KIND_MODULE_TYPE:
+                self._apply_module_profile(session, record, type_obj, data, profile_id)
         else:
             payload = build_type_payload(data, manufacturer.id, kind)
+            if profile_id is not None:
+                payload["profile"] = profile_id
+            if kind == KIND_MODULE_TYPE and data.get("attribute_data"):
+                payload["attributes"] = data["attribute_data"]
             type_obj = owner_api.create(**payload)
             self.log_info(session, record, f"Created {owner['label']} '{data['model']}' (id={type_obj.id})")
 
@@ -316,10 +335,70 @@ class DeviceTypeStage(BaseStage):
             or owner_api.get(model=data["model"], manufacturer_id=manufacturer_id)
         )
 
+    def _resolve_module_profile(self, session: Session, record: Record, data: dict):
+        """Resolve the YAML's module-type profile name to a NetBox profile id.
+
+        A profile name NetBox does not know is logged and skipped rather than
+        failing the record — the module type still imports without it.
+        """
+        name = data.get("profile")
+        if not name:
+            return None
+        profile = self.client.nb.dcim.module_type_profiles.get(name=name)
+        if not profile:
+            self.log_info(session, record,
+                          f"Module type profile '{name}' not found in NetBox; importing without a profile")
+            return None
+        return profile.id
+
+    @staticmethod
+    def _existing_attributes(type_obj) -> dict:
+        """The module type's stored profile attributes as a plain dict.
+
+        NetBox's REST serializer names the field 'attributes' (the YAML and
+        ORM call it attribute_data — the API drops that name entirely);
+        pynetbox may hand back a Record rather than a dict."""
+        existing = getattr(type_obj, "attributes", None) or getattr(type_obj, "attribute_data", None) or {}
+        return existing if isinstance(existing, dict) else dict(existing)
+
+    def _apply_module_profile(self, session: Session, record: Record, type_obj,
+                              data: dict, profile_id) -> None:
+        """Backfill a missing profile and missing attribute keys on an
+        existing module type (imports made before profile support left both
+        unset). Values already present are never overwritten. Writes go to
+        the API's 'attributes' field — 'attribute_data' is read-only."""
+        changed = []
+        if profile_id is not None and not getattr(type_obj, "profile", None):
+            type_obj.profile = profile_id
+            changed.append("profile")
+        wanted = data.get("attribute_data") or {}
+        existing = self._existing_attributes(type_obj)
+        missing = {k: v for k, v in wanted.items() if k not in existing}
+        if missing:
+            type_obj.attributes = {**existing, **missing}
+            changed.append("attributes")
+        if changed:
+            type_obj.save()
+            self.log_info(session, record,
+                          f"Updated existing module type with missing {' and '.join(changed)}")
+
+    def _module_profile_missing(self, type_obj, data: dict) -> bool:
+        """True when the YAML defines a profile or attributes the existing
+        module type lacks (and, for the profile, NetBox can actually resolve)."""
+        wanted = data.get("attribute_data") or {}
+        if any(k not in self._existing_attributes(type_obj) for k in wanted):
+            return True
+        if data.get("profile") and not getattr(type_obj, "profile", None):
+            return self.client.nb.dcim.module_type_profiles.get(name=data["profile"]) is not None
+        return False
+
     def _missing_components(self, type_obj, data: dict, kind: str = KIND_DEVICE_TYPE) -> bool:
         """True if any template named in the YAML does not exist on the device or
-        module type yet, or an existing front port lacks the rear-port mappings
-        the YAML defines (left empty by imports made before port-mapping support)."""
+        module type yet, an existing front port lacks the rear-port mappings the
+        YAML defines (left empty by imports made before port-mapping support), or
+        an existing module type lacks the YAML's profile or attribute_data."""
+        if kind == KIND_MODULE_TYPE and self._module_profile_missing(type_obj, data):
+            return True
         port_mappings = build_port_mappings(data)
         for _, endpoint, payloads, _ in build_component_payloads(data, kind):
             api = getattr(self.client.nb.dcim, endpoint)

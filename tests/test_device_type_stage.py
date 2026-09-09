@@ -98,6 +98,22 @@ port-mappings:
     rear_port_position: 1
 """
 
+# A module type carrying a profile and its attributes (library format,
+# cf. module-types/Dell/X185V.yaml)
+PROFILE_MODULE_YAML = """\
+profile: Power supply
+manufacturer: Dell
+model: X185V
+part_number: X185V
+attribute_data:
+  wattage: 550
+  hot_swappable: true
+power-ports:
+  - name: PSU{module}
+    type: iec-60320-c14
+    maximum_draw: 550
+"""
+
 # Pre-NetBox-4.5 library format: rear_port/rear_port_position inline on the
 # front-ports entries
 LEGACY_PANEL_YAML = """\
@@ -455,11 +471,23 @@ class ModuleTypeTests(unittest.TestCase):
         self.assertEqual(front_payloads[0]["rear_ports"],
                          [{"position": 1, "rear_port": 300, "rear_port_position": 1}])
 
-    def test_kind_autodetected_without_record_hint(self) -> None:
+    def test_missing_kind_defaults_to_device_type(self) -> None:
+        """Records queued before module-type support have no stored kind and
+        were always device types — even YAML without slug/u_height. Retrying
+        one must not autodetect it into a new module type."""
         stage = self._module_stage()
+        nb = stage.client.nb
+        nb.dcim.device_types.get.return_value = None
+        nb.dcim.device_types.create.return_value = MagicMock(id=42)
+        for endpoint in ("interface_templates", "rear_port_templates", "front_port_templates"):
+            getattr(nb.dcim, endpoint).filter.return_value = []
+
         netbox_id, url = stage.create(MagicMock(), self._record(MODULE_YAML))
-        self.assertEqual(netbox_id, 55)
-        self.assertIn("/dcim/module-types/", url)
+
+        self.assertEqual(netbox_id, 42)
+        self.assertIn("/dcim/device-types/", url)
+        nb.dcim.module_types.create.assert_not_called()
+        nb.dcim.device_types.create.assert_called_once()
 
     def test_existing_module_type_looked_up_by_model_not_slug(self) -> None:
         stage = self._module_stage()
@@ -470,6 +498,83 @@ class ModuleTypeTests(unittest.TestCase):
 
         nb.dcim.module_types.create.assert_not_called()
         nb.dcim.module_types.get.assert_called_with(model="BlueField-3 DPU B3220", manufacturer_id=7)
+
+    def test_profile_resolved_and_attributes_passed_on_create(self) -> None:
+        stage = self._module_stage()
+        nb = stage.client.nb
+        nb.dcim.module_type_profiles.get.return_value = MagicMock(id=9)
+        nb.dcim.power_port_templates.filter.return_value = []
+        nb.dcim.power_port_templates.create.side_effect = lambda p: [MagicMock(id=400)]
+
+        stage.create(MagicMock(), self._record(PROFILE_MODULE_YAML, kind="module_type"))
+
+        nb.dcim.module_type_profiles.get.assert_called_once_with(name="Power supply")
+        payload = nb.dcim.module_types.create.call_args.kwargs
+        self.assertEqual(payload["profile"], 9)
+        self.assertEqual(payload["attributes"], {"wattage": 550, "hot_swappable": True})
+        self.assertNotIn("attribute_data", payload)
+
+    def test_unknown_profile_imports_without_profile(self) -> None:
+        stage = self._module_stage()
+        nb = stage.client.nb
+        nb.dcim.module_type_profiles.get.return_value = None
+        nb.dcim.power_port_templates.filter.return_value = []
+        nb.dcim.power_port_templates.create.side_effect = lambda p: [MagicMock(id=400)]
+
+        stage.create(MagicMock(), self._record(PROFILE_MODULE_YAML, kind="module_type"))
+
+        payload = nb.dcim.module_types.create.call_args.kwargs
+        self.assertNotIn("profile", payload)
+        self.assertEqual(payload["attributes"], {"wattage": 550, "hot_swappable": True})
+
+    def test_existing_module_type_gains_missing_profile_and_attributes(self) -> None:
+        stage = self._module_stage()
+        nb = stage.client.nb
+        nb.dcim.module_type_profiles.get.return_value = MagicMock(id=9)
+        existing = MagicMock(id=55, profile=None, attributes=None, attribute_data=None)
+        nb.dcim.module_types.get.return_value = existing
+        psu = MagicMock(id=400)
+        psu.name = "PSU{module}"
+        nb.dcim.power_port_templates.filter.return_value = [psu]
+
+        stage.create(MagicMock(), self._record(PROFILE_MODULE_YAML, kind="module_type"))
+
+        self.assertEqual(existing.profile, 9)
+        self.assertEqual(existing.attributes, {"wattage": 550, "hot_swappable": True})
+        existing.save.assert_called_once()
+        nb.dcim.module_types.create.assert_not_called()
+
+    def test_missing_profile_makes_process_resume_instead_of_skip(self) -> None:
+        stage = self._module_stage()
+        nb = stage.client.nb
+        nb.dcim.module_type_profiles.get.return_value = MagicMock(id=9)
+        existing = MagicMock(id=55, profile=None, attributes={"wattage": 550, "hot_swappable": True})
+        nb.dcim.module_types.get.return_value = existing
+        psu = MagicMock(id=400)
+        psu.name = "PSU{module}"
+        nb.dcim.power_port_templates.filter.return_value = [psu]
+
+        record = self._record(PROFILE_MODULE_YAML, kind="module_type")
+        stage.process(MagicMock(), record)
+
+        self.assertEqual(record.status, "success")
+        self.assertEqual(existing.profile, 9)
+
+    def test_complete_module_type_with_profile_is_skipped(self) -> None:
+        stage = self._module_stage()
+        nb = stage.client.nb
+        existing = MagicMock(id=55, profile=MagicMock(id=9),
+                             attributes={"wattage": 550, "hot_swappable": True})
+        nb.dcim.module_types.get.return_value = existing
+        psu = MagicMock(id=400)
+        psu.name = "PSU{module}"
+        nb.dcim.power_port_templates.filter.return_value = [psu]
+
+        record = self._record(PROFILE_MODULE_YAML, kind="module_type")
+        stage.process(MagicMock(), record)
+
+        self.assertEqual(record.status, "skipped")
+        existing.save.assert_not_called()
 
     def test_complete_module_type_is_skipped_with_module_url(self) -> None:
         stage = self._module_stage()
