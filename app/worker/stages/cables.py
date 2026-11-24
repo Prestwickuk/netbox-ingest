@@ -74,9 +74,12 @@ class CableStage(BaseStage):
             "status": data.get("status") or STATUS_DEFAULT,
         }
 
-        for field in ("label", "cable_type", "color"):
-            if data.get(field):
-                payload[field] = data[field]
+        # CSV column -> NetBox API field. The API calls the cable type `type`; a
+        # `cable_type` key is not an API field, and NetBox silently drops unknown
+        # fields, so the type was never saved.
+        for column, api_field in (("label", "label"), ("cable_type", "type"), ("color", "color")):
+            if data.get(column):
+                payload[api_field] = data[column]
 
         cable = self.client.nb.dcim.cables.create(**payload)
         self.log_info(session, record, f"Created cable id={cable.id}")
